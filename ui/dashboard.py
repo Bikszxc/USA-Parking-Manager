@@ -2,7 +2,7 @@ import tkinter as tk
 import tkinter.font as tkFont
 from tkinter import messagebox
 from PIL import Image, ImageTk, ImageSequence
-from logic.auth import account_login
+from logic.auth import account_login, account_creation
 from logic.models import new_car_owner
 
 
@@ -154,6 +154,7 @@ class LoginScreen(tk.Frame):
 
         if account_login(username, password):
             self.master.show_frame(LoadingScreen)
+            self.master.title("USA Parking System |" + username)
             self.after(2000, lambda: self.master.show_frame(DashboardScreen))
         else:
             self.frame_error.place(relx=0.5, rely=0.2, anchor="center")
@@ -243,7 +244,7 @@ class DashboardScreen(tk.Frame):
             "Home": self.home_page,
             "Reservations": self.reservations_page,
             "Vehicles": None,
-            "Accounts": None,
+            "Accounts": self.accounts_page,
             "Map": None
         }
         for i, (name, page) in enumerate(nav.items(), start=2):
@@ -329,6 +330,70 @@ class DashboardScreen(tk.Frame):
         self.label_placeholder = tk.Label(self.page_reservations, text="RESERVATIONS PAGE", bg='#e6e6e6', font=self.master.header_font)
         self.label_placeholder.grid(row=0, column=0, sticky='nsew')
 
+    def accounts_page(self):
+        self.page_accounts = tk.Frame(self, bg='#e6e6e6')
+        self.page_accounts.grid(row=0, column=1, sticky='nsew')
+
+        def new_admin_ui():
+            self.frame_new_admin = tk.Frame(self.page_accounts, bg='#e6e6e6')
+            self.frame_new_admin.grid(row=0, column=0, sticky='nsew')
+
+            self.label_admin_name = tk.Label(self.frame_new_admin, text="Admin Name", bg='#e6e6e6')
+            self.label_admin_name.grid(row=0, column=0)
+
+            self.entry_admin_name = tk.Entry(self.frame_new_admin, bg='#e6e6e6')
+            self.entry_admin_name.grid(row=0, column=1)
+
+            self.label_admin_email = tk.Label(self.frame_new_admin, text="Admin Email", bg='#e6e6e6')
+            self.label_admin_email.grid(row=1, column=0)
+
+            self.entry_admin_email = tk.Entry(self.frame_new_admin, bg='#e6e6e6')
+            self.entry_admin_email.grid(row=1, column=1)
+
+            self.label_admin_user = tk.Label(self.frame_new_admin, text="Username", bg='#e6e6e6')
+            self.label_admin_user.grid(row=2, column=0)
+
+            self.entry_admin_user = tk.Entry(self.frame_new_admin, bg='#e6e6e6')
+            self.entry_admin_user.grid(row=2, column=1)
+
+            self.label_admin_password = tk.Label(self.frame_new_admin, text="Password", bg='#e6e6e6')
+            self.label_admin_password.grid(row=3, column=0)
+
+            self.entry_admin_password = tk.Entry(self.frame_new_admin, bg='#e6e6e6')
+            self.entry_admin_password.grid(row=3, column=1)
+
+            self.label_master_password = tk.Label(self.frame_new_admin, text="Master Password", bg='#e6e6e6')
+            self.label_master_password.grid(row=4, column=0)
+
+            self.entry_master_password = tk.Entry(self.frame_new_admin, bg='#e6e6e6')
+            self.entry_master_password.grid(row=4, column=1)
+
+            def submit_new_admin():
+                try:
+                    admin_name = self.entry_admin_name.get()
+                    admin_email = self.entry_admin_email.get()
+                    admin_user = self.entry_admin_user.get()
+                    admin_password = self.entry_admin_password.get()
+                    master_password = self.entry_master_password.get()
+
+                    if account_creation(admin_user, admin_password, admin_name, admin_email, master_password):
+                        messagebox.showinfo("Notification", "Successfully added " + admin_name)
+
+                        self.entry_admin_name.delete(0, tk.END)
+                        self.entry_admin_email.delete(0, tk.END)
+                        self.entry_admin_user.delete(0, tk.END)
+                        self.entry_admin_password.delete(0, tk.END)
+                        self.entry_master_password.delete(0, tk.END)
+                except Exception as e:
+                    messagebox.showerror("Error!", f"Error: {e}")
+
+            self.button_new_admin = tk.Button(self.frame_new_admin, text="Create Account", bg='#b80000', fg='#ffffff',
+                                              relief='flat', command=submit_new_admin)
+            self.button_new_admin.grid(row=5, column=0, sticky='ew')
+
+
+
+        new_admin_ui()
 
 if __name__ == "__main__":
     app = App()

