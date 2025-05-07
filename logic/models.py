@@ -3,6 +3,15 @@ from db.database import get_connection
 conn = get_connection()
 cursor = conn.cursor()
 
+def new_admin_log(admin_name, action):
+    try:
+        cursor.execute("SELECT id FROM admins WHERE username = ?", (admin_name,))
+        admin_id = cursor.fetchone()
+
+        cursor.execute("INSERT INTO admin_logs (admin_id, action) VALUES (?, ?)", (admin_id, action))
+        conn.commit()
+    except Exception as e:
+        print(f"Error Occurred! {e}")
 
 # Add New Car Owner
 def new_car_owner(owner_name, email, owner_type, contact_number, refresh_callback=None) -> bool:
