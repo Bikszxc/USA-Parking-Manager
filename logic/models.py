@@ -84,7 +84,7 @@ def get_vehicle_type(plate_number):
 # Fetch all Parking Slots
 def get_parking_slots():
     try:
-        cursor.execute("SELECT slot_number FROM parking_slots")
+        cursor.execute("SELECT * FROM parking_slots")
         return cursor.fetchall()
     except Exception as e:
         print(f"Error Occurred!", e)
@@ -113,15 +113,21 @@ def park_vehicle(slot_number, vehicle_type, owner_name, plate_number, status_typ
 
 def unpark_vehicle(slot):
     try:
-        cursor.execute('''
-        UPDATE parking_slots
-        SET is_occupied = 0
-        WHERE slot_number = ?
-        ''', (slot,))
+        cursor.execute("SELECT is_occupied FROM parking_slots WHERE slot_number = ?", (slot,))
+        slot_occupied = cursor.fetchone()[0]
 
-        conn.commit()
+        if slot_occupied == 1:
+            cursor.execute('''
+            UPDATE parking_slots
+            SET is_occupied = 0
+            WHERE slot_number = ?
+            ''', (slot,))
 
-        return True
+            conn.commit()
+
+            return True
+
+        return False
     except Exception as e:
         print("Error Occurred!", e)
         return False
