@@ -46,7 +46,7 @@ def init_db():
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         owner_id INTEGER,
         plate_number TEXT UNIQUE NOT NULL,
-        car_type TEXT NOT NULL,
+        vehicle_type TEXT NOT NULL,
         FOREIGN KEY (owner_id) REFERENCES car_owners(id)
         )
     ''')
