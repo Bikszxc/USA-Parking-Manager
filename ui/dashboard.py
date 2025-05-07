@@ -287,8 +287,15 @@ class DashboardScreen(tk.Frame):
         self.page_home = tk.Frame(self, bg='#e6e6e6', padx=10, pady=10)
         self.page_home.grid(row=0, column=1, sticky='nsew')
 
+        tk.Frame(self.page_home, bg='#e6e6e6', height=35).grid(row=1, column=0, sticky='nsew')
+
         frame_park_slots = tk.Frame(self.page_home, bg='#b80000', padx=10, pady=10)
         frame_park_slots.grid(row=2, column=0, sticky='nsew')
+
+        label_park_slots = tk.Label(frame_park_slots, text="Parking Slots", bg='#b80000', fg="white", font=self.master.header_font)
+        label_park_slots.grid(row=0, column=0, columnspan=2, sticky='w')
+
+        tk.Frame(frame_park_slots, bg='#b80000', height=15).grid(row=1, column=0, sticky='nsew')
 
         def load_parking_slots():
             park_slots = [slot for slot in get_parking_slots()]
@@ -303,15 +310,18 @@ class DashboardScreen(tk.Frame):
 
         def park_slots_ui():
 
+            label_car_details = tk.Label(frame_park_slots, text="Select a slot", font=self.master.subheader_font, bg='#b80000', fg='white')
+            label_car_details.grid(row=0, column=3, columnspan=2, sticky='e')
+
             j = 0
-            i = 1
+            i = 2
 
             for slot in load_parking_slots():
                 bgcolor = "green" if slot[2] == 0 else "red"
                 pkg_text = f"{slot[1]}\nAvailable\n" if slot[2] == 0 else f"{slot[1]}\n{slot[5]}\n{slot[3]}"
                 btn_cmd = lambda x=slot[1]: unpark(x)
-                button = tk.Button(frame_park_slots, text=pkg_text, bg=bgcolor, fg="black", width=20, command=btn_cmd,
-                                   anchor="center", font=self.master.login_font)
+                button = tk.Button(frame_park_slots, text=pkg_text, bg=bgcolor, fg="white", width=20, command=btn_cmd,
+                                   anchor="center", font=("Helvetica", 10), relief="ridge")
                 button.grid(row=i, column=j, sticky='nsew')
 
                 j += 1
@@ -483,7 +493,6 @@ class DashboardScreen(tk.Frame):
             button_park_vehicle.grid(row=14, column=0, columnspan=4, sticky='nsew')
 
         park_vehicle_ui()
-        tk.Frame(self.page_home, bg='#e6e6e6', height=100).grid(row=1, column=0, sticky='nsew')
         park_slots_ui()
 
     def reservations_page(self):
@@ -690,7 +699,6 @@ class DashboardScreen(tk.Frame):
 def is_valid_email(email):
     pattern = r'^[\w\.-]+@[\w\.-]+\.\w+$'
     return re.match(pattern, email) is not None
-
 
 if __name__ == "__main__":
     app = App()
