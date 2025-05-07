@@ -4,4 +4,4 @@ from ui.dashboard import App
 init_db()
 
 app = App()
-app.mainloop()
+app.mainloop()   
