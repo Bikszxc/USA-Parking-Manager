@@ -4,12 +4,15 @@ conn = get_connection()
 cursor = conn.cursor()
 
 # Add New Car Owner
-def new_car_owner(owner_name, email, owner_type, contact_number):
+def new_car_owner(owner_name, email, owner_type, contact_number, refresh_callback=None):
     try:
         cursor.execute("INSERT INTO car_owners (owner_name, email, type, contact_number) VALUES (?, ?, ?, ?)",
                        (owner_name, email, owner_type, contact_number))
 
         conn.commit()
+
+        if refresh_callback:
+            refresh_callback()
 
         return True
     except Exception as e:
