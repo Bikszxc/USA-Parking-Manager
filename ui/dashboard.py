@@ -1,9 +1,10 @@
 import tkinter as tk
 import tkinter.font as tkFont
-from tkinter import messagebox
+from tkinter import messagebox, ttk
 from PIL import Image, ImageTk, ImageSequence
 from logic.auth import account_login, account_creation
-from logic.models import new_car_owner
+from logic.models import new_car_owner, get_car_owners
+import re
 
 
 class App(tk.Tk):
@@ -38,7 +39,6 @@ class App(tk.Tk):
         frame = self.frames[container]
         frame.tkraise()
 
-
 class LoadingScreen(tk.Frame):
     def __init__(self, master):
         super().__init__(master, bg="#e6e6e6")
@@ -60,7 +60,6 @@ class LoadingScreen(tk.Frame):
         self.label.configure(image=frame)
         self.frame_index = (self.frame_index + 1) % len(self.frames)
         self.after(50, self.animate)
-
 
 class LoginScreen(tk.Frame):
     def __init__(self, master):
@@ -154,7 +153,7 @@ class LoginScreen(tk.Frame):
 
         if account_login(username, password):
             self.master.show_frame(LoadingScreen)
-            self.master.title("USA Parking System |" + username)
+            self.master.title("USA Parking System | Logged in as: " + username)
             self.after(2000, lambda: self.master.show_frame(DashboardScreen))
         else:
             self.frame_error.place(relx=0.5, rely=0.2, anchor="center")
@@ -271,6 +270,76 @@ class DashboardScreen(tk.Frame):
         self.page_home = tk.Frame(self, bg='#e6e6e6')
         self.page_home.grid(row=0, column=1, sticky='nsew')
 
+        def test_tree_ui():
+
+            # Function to load owner data
+            def load_owner_data():
+                for row in tree.get_children():
+                    tree.delete(row)
+                owners = get_car_owners()  # Assume this function gets the list of owners
+                for owner in owners:
+                    tree.insert("", tk.END, values=owner)
+
+            # Function to sort the data in the Treeview based on the clicked column
+            def sort_treeview(column, reverse=False):
+                """Sort the Treeview data based on the clicked column."""
+                rows = [(tree.item(item)["values"], item) for item in tree.get_children()]
+                rows.sort(key=lambda x: x[0][column], reverse=reverse)
+
+                # Rearranging the rows in the Treeview based on the sorted data
+                for index, (_, item) in enumerate(rows):
+                    tree.move(item, '', index)
+
+                return not reverse
+
+            # Function to handle column click and toggle sorting
+            def on_column_click(column):
+                nonlocal sort_reverse
+                sort_reverse = sort_treeview(column, sort_reverse)
+
+            style = ttk.Style(self.page_home)
+            style.theme_use("alt")
+            style.configure("Treeview.Heading", font=('Helvetica', 10, 'bold'), background="#b80000",
+                            foreground="white", relief="flat")
+
+            # Frame for Treeview
+            frame_tree = tk.Frame(self.page_home, bg='#e6e6e6')
+            frame_tree.grid(row=1, column=0, sticky='nsew')
+
+            # Create Treeview
+            tree = ttk.Treeview(frame_tree, columns=("ID", "Owner Name", "Email Address", "Type", "Contact Number"),
+                                show="headings")
+            tree.heading("#1", text="ID", anchor="w",command=lambda: on_column_click(0))
+            tree.heading("#2", text="Owner Name", anchor="w", command=lambda: on_column_click(1))
+            tree.heading("#3", text="Email Address", anchor="w", command=lambda: on_column_click(2))
+            tree.heading("#4", text="Type", anchor="w", command=lambda: on_column_click(3))
+            tree.heading("#5", text="Contact Number", anchor="w", command=lambda: on_column_click(4))
+
+            # Set column widths
+            tree.column("#1", width=50, stretch=tk.NO)
+            tree.column("#2", width=150)
+            tree.column("#3", width=200)
+            tree.column("#4", width=100)
+            tree.column("#5", width=120)
+
+            # Layout the Treeview
+            tree.grid(row=0, column=0, sticky='nsew')
+
+            # Scrollbar setup
+            scrollbar = ttk.Scrollbar(frame_tree, orient="vertical", command=tree.yview)
+            tree.configure(yscrollcommand=scrollbar.set)
+            scrollbar.grid(row=0, column=1, sticky='nsew')
+
+            # Refresh Button
+            button_refresh = tk.Button(frame_tree, text="Refresh", command=load_owner_data)
+            button_refresh.grid(row=1, column=0, sticky='nsew')
+
+            # Initial data load
+            load_owner_data()
+
+            # Sorting order flag (True for descending, False for ascending)
+            sort_reverse = False
+
         def new_car_owner_ui():
             self.frame_owner = tk.Frame(self.page_home, bg='#e6e6e6', relief='raised', width=300)
             self.frame_owner.grid(row=0, column=0)
@@ -306,6 +375,12 @@ class DashboardScreen(tk.Frame):
                     email_address = self.entry_owner_email.get()
                     contact_number = self.entry_owner_number.get()
 
+                    if not all([owner_name, owner_type, email_address, contact_number]):
+                        raise Exception(messagebox.showerror("Error", "Please enter all fields"))
+
+                    if not is_valid_email(email_address):
+                        raise Exception(messagebox.showerror("Error", "Invalid email address!"))
+
                     if new_car_owner(owner_name, email_address, owner_type, contact_number):
                         messagebox.askokcancel("Info","Successfully added" + owner_name)
 
@@ -314,12 +389,13 @@ class DashboardScreen(tk.Frame):
                         self.entry_owner_email.delete(0, tk.END)
                         self.entry_owner_number.delete(0, tk.END)
                 except Exception as e:
-                    messagebox.showinfo("showerror", "Error")
+                    print(f"Error: {e}")
 
             self.add_button = tk.Button(self.frame_owner, text="Submit", bg='#b80000', fg='#ffffff', relief='flat', command=submit_owner)
             self.add_button.grid(row=4, column=1, sticky='ew')
 
         new_car_owner_ui()
+        test_tree_ui()
 
     def reservations_page(self):
         self.page_home.grid_forget()
@@ -394,6 +470,10 @@ class DashboardScreen(tk.Frame):
 
 
         new_admin_ui()
+
+def is_valid_email(email):
+    pattern = r'^[\w\.-]+@[\w\.-]+\.\w+$'
+    return re.match(pattern, email) is not None
 
 if __name__ == "__main__":
     app = App()
