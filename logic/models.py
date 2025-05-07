@@ -81,6 +81,15 @@ def get_vehicle_type(plate_number):
         print("Error Occurred!", e)
         return None
 
+# Fetch all Parking Slots
+def get_parking_slots():
+    try:
+        cursor.execute("SELECT slot_number FROM parking_slots")
+        return cursor.fetchall()
+    except Exception as e:
+        print(f"Error Occurred!", e)
+        return None
+
 # Park Vehicle to a Parking Slot
 def park_vehicle(slot_number, vehicle_type, owner_name, plate_number, status_type, contact_number):
     try:
