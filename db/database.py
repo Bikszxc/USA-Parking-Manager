@@ -55,9 +55,31 @@ def init_db():
         CREATE TABLE IF NOT EXISTS parking_slots (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         slot_number TEXT UNIQUE NOT NULL,
-        is_occupied BOOLEAN DEFAULT 0
+        is_occupied BOOLEAN DEFAULT 0,
+        vehicle_type TEXT,
+        owner_name TEXT,
+        plate_number TEXT,
+        type TEXT,
+        contact_number TEXT
         )
     ''')
+
+    cursor.execute('''
+                   CREATE TRIGGER IF NOT EXISTS clear_parking_slot_fields
+                       AFTER UPDATE OF is_occupied
+                       ON parking_slots
+                       FOR EACH ROW
+                       WHEN NEW.is_occupied = 0
+                   BEGIN
+                       UPDATE parking_slots
+                       SET owner_name     = NULL,
+                           plate_number   = NULL,
+                           vehicle_type   = NULL,
+                           type = NULL,
+                           contact_number = NULL
+                       WHERE id = NEW.id;
+                   END;
+                   ''')
 
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS parking_reservations (
