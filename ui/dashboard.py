@@ -9,6 +9,7 @@ from logic.auth import account_login, account_creation
 from logic.models import new_car_owner, get_car_owners, get_owner_vehicles, record_found, get_owner, get_vehicle_type, \
     park_vehicle, get_parking_slots, unpark_vehicle
 
+
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
@@ -259,7 +260,7 @@ class DashboardScreen(tk.Frame):
         nav = {
             "Home": self.home_page,
             "Reservations": self.reservations_page,
-            "Vehicles": None,
+            "Vehicles": self.vehicles_page,
             "Accounts": self.accounts_page,
             "Map": None
         }
@@ -287,15 +288,19 @@ class DashboardScreen(tk.Frame):
         self.page_home = tk.Frame(self, bg='#e6e6e6', padx=10, pady=10)
         self.page_home.grid(row=0, column=1, sticky='nsew')
 
-        tk.Frame(self.page_home, bg='#e6e6e6', height=35).grid(row=1, column=0, sticky='nsew')
+        tk.Frame(self.page_home, bg='#e6e6e6', height=25).grid(row=1, column=0, sticky='nsew')
 
         frame_park_slots = tk.Frame(self.page_home, bg='#b80000', padx=10, pady=10)
         frame_park_slots.grid(row=2, column=0, sticky='nsew')
 
-        label_park_slots = tk.Label(frame_park_slots, text="Parking Slots", bg='#b80000', fg="white", font=self.master.header_font)
-        label_park_slots.grid(row=0, column=0, columnspan=2, sticky='w')
+        tk.Frame(frame_park_slots, bg='#b80000', height=50).grid(row=0, column=0, rowspan=1, sticky='nsew')
 
-        tk.Frame(frame_park_slots, bg='#b80000', height=15).grid(row=1, column=0, sticky='nsew')
+        label_park_slots = tk.Label(frame_park_slots, text="Parking Slots", bg='#b80000', fg="white",
+                                    font=self.master.header_font)
+        label_park_slots.place(x=0, y=0)
+
+        frame_top_ui = tk.Frame(self.page_home, bg='#b80000')
+        frame_top_ui.grid(row= 0, column=0, sticky='nsew')
 
         def load_parking_slots():
             park_slots = [slot for slot in get_parking_slots()]
@@ -307,6 +312,34 @@ class DashboardScreen(tk.Frame):
                 park_slots_ui()
             else:
                 messagebox.showinfo("Notification", f"Parking slot is already available!")
+
+        def car_list_ui():
+            tk.Frame(frame_top_ui, bg='#e6e6e6', width=25).grid(row=0, column=1, sticky='nsew')
+
+            frame_car_list = tk.Frame(frame_top_ui, bg='#b80000', padx=10, pady=10,)
+            frame_car_list.grid(row=0, column=2, sticky='nsew')
+
+            label_park_title = tk.Label(frame_car_list, text="Vehicle Info", font=self.master.header_font,
+                                        bg='#b80000', fg='#ffffff')
+            label_park_title.grid(row=0, column=0, sticky='w')
+
+            tk.Frame(frame_car_list, bg='#b80000', height=10).grid(row=1, column=0, sticky='nsew')
+
+            label_park_slot = tk.Label(frame_car_list, text="Parking Slot", bg='#b80000', fg="white",
+                                         font=self.master.subheader_font, pady=5)
+            label_park_slot.grid(row=2, column=0, sticky='w')
+
+            label_owner_name = tk.Label(frame_car_list, text="Owner Name", bg='#b80000', fg="white", font=self.master.subheader_font, pady=5)
+            label_owner_name.grid(row=3, column=0, sticky='w')
+
+            label_contact_number = tk.Label(frame_car_list, text="Contact Number", bg='#b80000', fg="white", font=self.master.subheader_font, pady=5)
+            label_contact_number.grid(row=4, column=0, sticky='w')
+
+            label_plate_number = tk.Label(frame_car_list, text="Plate Number", bg='#b80000', fg="white", font=self.master.subheader_font, pady=5)
+            label_plate_number.grid(row=5, column=0, sticky='w')
+
+            label_vehicle_type = tk.Label(frame_car_list, text="Vehicle Type", bg='#b80000', fg="white", font=self.master.subheader_font, pady=5)
+            label_vehicle_type.grid(row=6, column=0, sticky='w')
 
         def park_slots_ui():
 
@@ -397,7 +430,7 @@ class DashboardScreen(tk.Frame):
                 except Exception as e:
                     print(f"Error: {e}")
 
-            frame_park_vehicle = tk.Frame(self.page_home, bg='#b80000', padx=10, pady=10)
+            frame_park_vehicle = tk.Frame(frame_top_ui, bg='#b80000', padx=10, pady=10)
             frame_park_vehicle.grid(row=0, column=0, sticky='nw')
 
             label_park_title = tk.Label(frame_park_vehicle, text="Park Vehicle", font=self.master.header_font,
@@ -493,6 +526,7 @@ class DashboardScreen(tk.Frame):
             button_park_vehicle.grid(row=14, column=0, columnspan=4, sticky='nsew')
 
         park_vehicle_ui()
+        car_list_ui()
         park_slots_ui()
 
     def reservations_page(self):
@@ -502,6 +536,32 @@ class DashboardScreen(tk.Frame):
         self.label_placeholder = tk.Label(self.page_reservations, text="RESERVATIONS PAGE", bg='#e6e6e6',
                                           font=self.master.header_font)
         self.label_placeholder.grid(row=0, column=0, sticky='nsew')
+
+    def vehicles_page(self):
+        self.page_vehicles = tk.Frame(self, bg='#e6e6e6', padx=10, pady=10)
+        self.page_vehicles.grid(row=0, column=1, sticky='nsew')
+
+        def register_vehicle_ui():
+
+            frame_register_vehicle = tk.Frame(self.page_vehicles, bg='#b80000', padx=10, pady=10)
+            frame_register_vehicle.grid(row=0, column=0, sticky='nw')
+
+            label_register_vehicle = tk.Label(frame_register_vehicle, text="Register Vehicle", font=self.master.header_font,
+                     bg='#b80000', fg='#ffffff')
+            label_register_vehicle.grid(row=0, column=0, sticky='nsew')
+
+            tk.Frame(frame_register_vehicle, bg='#b80000', height=15).grid(row=1, column=0, sticky='nsew')
+
+            label_owner_name = tk.Label(frame_register_vehicle, bg='#b80000', fg="white", text="Owner Name")
+            label_owner_name.grid(row=2, column=0, sticky='w')
+
+            entry_owner_name = tk.Entry(frame_register_vehicle, bg='#b80000', fg="white")
+            entry_owner_name.grid(row=2, column=1, sticky='nsew')
+
+            #  add plate number (row 3), vehicle type (row 4)
+
+        register_vehicle_ui()
+
 
     def accounts_page(self):
         self.page_accounts = tk.Frame(self, bg='#e6e6e6')
