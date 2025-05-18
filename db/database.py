@@ -47,6 +47,8 @@ def init_db():
         owner_id INTEGER,
         plate_number TEXT UNIQUE NOT NULL,
         vehicle_type TEXT NOT NULL,
+        registration_date TEXT NOT NULL,
+        expiration_date TEXT NOT NULL,
         FOREIGN KEY (owner_id) REFERENCES car_owners(id)
         )
     ''')
