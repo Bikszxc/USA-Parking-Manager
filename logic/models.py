@@ -1,4 +1,9 @@
+
 from db.database import get_connection
+from datetime import datetime, timezone, timedelta
+
+ph_offset = timezone(timedelta(hours=8))
+ph_time = datetime.now(ph_offset)
 
 conn = get_connection()
 cursor = conn.cursor()
@@ -8,7 +13,7 @@ def new_admin_log(admin_name, action):
         cursor.execute("SELECT id FROM admins WHERE username = ?", (admin_name,))
         admin_id = cursor.fetchone()
 
-        cursor.execute("INSERT INTO admin_logs (admin_id, action) VALUES (?, ?)", (admin_id, action))
+        cursor.execute("INSERT INTO admin_logs (admin_id, action, timestamp) VALUES (?, ?, ?)", (admin_id[0], action, ph_time))
         conn.commit()
     except Exception as e:
         print(f"Error Occurred! {e}")
@@ -32,7 +37,7 @@ def new_car_owner(owner_name, email, owner_type, contact_number, refresh_callbac
 
 
 # Park Vehicle to a Parking Slot
-def park_vehicle(slot_number, vehicle_type, owner_name, plate_number, status_type, contact_number) -> bool:
+def park_vehicle(admin_name, slot_number, vehicle_type, owner_name, plate_number, status_type, contact_number) -> bool:
     try:
         cursor.execute('''
                        UPDATE parking_slots
@@ -46,6 +51,8 @@ def park_vehicle(slot_number, vehicle_type, owner_name, plate_number, status_typ
                        ''', (vehicle_type, owner_name, plate_number, status_type, contact_number, slot_number))
 
         conn.commit()
+
+        new_admin_log(admin_name, f"Parked {plate_number} in Slot {slot_number}")
 
         return True
     except Exception as e:
@@ -76,14 +83,23 @@ def unpark_vehicle(slot) -> bool:
 
 
 # Assign Vehicle to Car Owner
-def assign_vehicle(owner_id, plate_number, vehicle_type):
+def assign_vehicle(owner_name, plate_number, vehicle_type, expiration_date) -> bool:
     try:
-        cursor.execute("INSERT INTO registered_cars (owner_id, plate_number, vehicle_type) VALUES (?, ?, ?)",
-                       (owner_id, plate_number, vehicle_type))
+        cursor.execute("SELECT id FROM car_owners WHERE owner_name= ?", (owner_name,))
+        owner_id = cursor.fetchone()
 
-        conn.commit()
+        if owner_id:
+            cursor.execute("INSERT INTO registered_cars (owner_id, plate_number, vehicle_type, registration_date, expiration_date) VALUES (?, ?, ?, ?, ?)",
+                           (owner_id[0], plate_number, vehicle_type, ph_time.strftime("%m/%d/%Y"), expiration_date))
+
+            conn.commit()
+
+            return True
+
+        return False
     except Exception as e:
         print("Error Occurred!", e)
+        return False
 
 
 # ================== DELETION =================== #
@@ -118,7 +134,7 @@ def record_found(owner_name: str = None):
 
 def get_owner(owner_name: str):
     try:
-        cursor.execute("SELECT id, owner_name, type, contact_number FROM car_owners WHERE owner_name = ?",
+        cursor.execute("SELECT id, owner_name, type, contact_number FROM car_owners WHERE owner_name = ? COLLATE NOCASE",
                        (owner_name,))
         return cursor.fetchone()
     except Exception as e:
@@ -164,6 +180,28 @@ def get_parking_slots():
     try:
         cursor.execute("SELECT * FROM parking_slots")
         return cursor.fetchall()
+    except Exception as e:
+        print(f"Error Occurred!", e)
+        return None
+
+def get_parkslot_info(slot_number):
+    try:
+        cursor.execute("SELECT * FROM parking_slots WHERE slot_number = ?", (slot_number,))
+        return cursor.fetchone()
+    except Exception as e:
+        print(f"Error Occurred!", e)
+        return None
+
+def check_registration(plate_number):
+    try:
+        cursor.execute("SELECT expiration_date FROM registered_cars WHERE plate_number = ?", (plate_number,))
+        dates = cursor.fetchone()
+        expiration_date = datetime.strptime(dates[0], "%m/%d/%Y")
+
+        if ph_time > expiration_date.replace(tzinfo=ph_offset):
+            return False
+
+        return True
     except Exception as e:
         print(f"Error Occurred!", e)
         return None
