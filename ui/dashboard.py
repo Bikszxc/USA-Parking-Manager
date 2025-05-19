@@ -3,6 +3,7 @@ import tkinter as tk
 import tkinter.font as tkFont
 from tkcalendar import Calendar, DateEntry
 from tkinter import messagebox, ttk
+from datetime import datetime, timezone, timedelta
 
 from PIL import Image, ImageTk, ImageSequence
 
@@ -598,6 +599,10 @@ class DashboardScreen(tk.Frame):
         self.page_vehicles = tk.Frame(self, bg='#e6e6e6', padx=10, pady=10)
         self.page_vehicles.grid(row=0, column=1, sticky='nsew')
 
+        # renew_vehicle_ui
+        # edit_vehicle_ui
+        # tree_view_vehicle_with_search
+
         def register_vehicle_ui():
 
             def register():
@@ -607,21 +612,27 @@ class DashboardScreen(tk.Frame):
                     vehicle_type = entry_vehicle_type.get()
                     expiration_date = entry_valid_till.get()
 
+                    ph_offset = timezone(timedelta(hours=8))
+                    ph_time = datetime.now(ph_offset)
+
                     if not get_owner(owner_name):
-                        messagebox.showerror("Error", "Only bonafide students, staffs,\nand alumni can register.")
+                        raise Exception(messagebox.showerror("Error", "Only bonafide students, staffs,\nand alumni can register."))
 
                     if not is_valid_plate_number(plate_number):
-                        messagebox.showerror("Error", "Invalid Plate Number")
+                        raise Exception(messagebox.showerror("Error", "Invalid Plate Number"))
 
                     owner_name = get_owner(owner_name)[1]
 
                     if assign_vehicle(owner_name, plate_number, vehicle_type, expiration_date):
                         messagebox.showinfo("Success", "Vehicle Registered")
+                        for entry in (entry_owner_name, entry_plate_number, entry_vehicle_type, entry_valid_till):
+                            entry.delete(0, tk.END)
+                        entry_valid_till.insert(0, ph_time.strftime("%m/%d/%Y"))
                     else:
                         messagebox.showerror("Error", "Vehicle not Registered")
 
                 except Exception as e:
-                    messagebox.showerror("Error", f"Error Occurred!\n{e}")
+                    pass
 
             frame_register_vehicle = tk.Frame(self.page_vehicles, bg='#b80000', padx=10, pady=10, width=500)
             frame_register_vehicle.grid(row=0, column=0, sticky='nw')
