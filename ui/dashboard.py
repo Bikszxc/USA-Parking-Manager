@@ -9,9 +9,8 @@ from PIL import Image, ImageTk, ImageSequence
 
 from logic.auth import account_login, account_creation
 from logic.models import new_car_owner, get_car_owners, get_owner_vehicles, record_found, get_owner, get_vehicle_type, \
-    park_vehicle, get_parking_slots, unpark_vehicle, get_parkslot_info, assign_vehicle, check_registration, \
-    renew_vehicle, check_plate_number, \
-    get_vehicles, get_vehicle_owner, get_reservations
+    park_vehicle, get_parking_slots, unpark_vehicle, get_parkslot_info, assign_vehicle, check_registration,\
+    renew_vehicle, check_plate_number, get_vehicles, get_vehicle_owner, get_reservations
 
 
 class App(tk.Tk):
@@ -519,29 +518,32 @@ class HomePage(tk.Frame):
         self.grid_rowconfigure(2, weight=10)
 
     def fetch_database(self, event):
-        self.car_owners = sorted([name[1] for name in get_car_owners()])
-        self.vehicles = sorted([plate[2] for plate in get_vehicles()])
-        self.park_slots = sorted([slot for slot in get_parking_slots()])
-        self.slot_numbers = [slot[1] for slot in self.park_slots]
+        try:
+            self.car_owners = sorted([name[1] for name in get_car_owners()])
+            self.vehicles = sorted([plate[2] for plate in get_vehicles()])
+            self.park_slots = sorted([slot for slot in get_parking_slots()])
+            self.slot_numbers = [slot[1] for slot in self.park_slots]
 
-        self.dropdown_owner.config(values=self.car_owners)
-        self.dropdown_plate_number.config(values=self.vehicles)
-        self.dropdown_park_slot.config(values=self.slot_numbers)
+            self.dropdown_owner.config(values=self.car_owners)
+            self.dropdown_plate_number.config(values=self.vehicles)
+            self.dropdown_park_slot.config(values=self.slot_numbers)
 
-        for slot in self.park_slots:
-            slot_number = slot[1]
-            slot_status = slot[2]
+            for slot in self.park_slots:
+                slot_number = slot[1]
+                slot_status = slot[2]
 
-            prev_status = self.previous_slot_status.get(slot_number)
+                prev_status = self.previous_slot_status.get(slot_number)
 
-            if prev_status != slot_status:
-                bgcolor = "green" if slot_status == 0 else ("gray")
-                pkg_text = f"{slot_number}\nAvailable\n" if slot_status == 0 else f"{slot_number}\n{slot[5]}\n{slot[3]}"
+                if prev_status != slot_status:
+                    bgcolor = "green" if slot_status == 0 else ("gray")
+                    pkg_text = f"{slot_number}\nAvailable\n" if slot_status == 0 else f"{slot_number}\n{slot[5]}\n{slot[3]}"
 
-                if slot_number in self.park_slot_buttons:
-                    self.park_slot_buttons[slot_number].config(text=pkg_text, bg=bgcolor)
+                    if slot_number in self.park_slot_buttons:
+                        self.park_slot_buttons[slot_number].config(text=pkg_text, bg=bgcolor)
 
-            self.previous_slot_status[slot_number] = slot_status
+                self.previous_slot_status[slot_number] = slot_status
+        except Exception as e:
+            print(f"Fetch Error!", e)
 
     def get_slot_info(self, slot_number):
 
