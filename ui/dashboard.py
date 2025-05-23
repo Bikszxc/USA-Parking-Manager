@@ -606,6 +606,9 @@ class HomePage(tk.Frame):
             if not is_valid_plate_number(plate_number):
                 raise Exception("Invalid plate number!", messagebox.showerror("Error", "Invalid Plate Number"))
 
+            if not check_registration(plate_number):
+                raise Exception(messagebox.showerror("Error", "Vehicle Pass is Expired!"))
+
             if not slot_number in self.slot_numbers:
                 raise Exception(messagebox.showerror("Error", "Slot number must be in parking slots!"))
 
