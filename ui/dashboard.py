@@ -547,7 +547,7 @@ class HomePage(tk.Frame):
 
     def get_slot_info(self, slot_number):
 
-        for res in (self.v_info):
+        for res in self.v_info:
             self.v_info[res].set("")
 
         if self.park_slot_buttons[slot_number]:
