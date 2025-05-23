@@ -7,6 +7,26 @@ print(DB_PATH)
 def get_connection() -> sqlite3.Connection:
     return sqlite3.connect(DB_PATH, check_same_thread=False)
 
+def create_parking_slots():
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    letters = ["A", "B", "C", "D", "E"]
+
+    cursor.execute('SELECT * FROM parking_slots')
+    parking_slots = cursor.fetchall()
+
+    if not parking_slots:
+        for i in range(1, 6):
+            for letter in letters:
+                slot = f"{i}{letter}"
+                cursor.execute("INSERT INTO parking_slots (slot_number) VALUES (?)", (slot,))
+                connection.commit()
+
+    connection.close()
+
+
+
 def init_db():
     conn = get_connection()
     cursor = conn.cursor()
@@ -62,7 +82,10 @@ def init_db():
         owner_name TEXT,
         plate_number TEXT,
         type TEXT,
-        contact_number TEXT
+        contact_number TEXT,
+        reservation_id INTEGER,
+        reservation_dt TEXT,
+        FOREIGN KEY (reservation_id) REFERENCES reservations(id)
         )
     ''')
 
@@ -99,3 +122,5 @@ def init_db():
 
     conn.commit()
     conn.close()
+
+    create_parking_slots()
