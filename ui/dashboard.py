@@ -602,6 +602,9 @@ class HomePage(tk.Frame):
             if not all([slot_number, vehicle_type, owner_name, plate_number, status_type, contact_number]):
                 raise Exception("Please enter all required fields!",
                                 messagebox.showerror("Error", "Please enter all required fields!"))
+            
+            if not is_valid_plate_number(plate_number):
+                raise Exception("Invalid plate number!", messagebox.showerror("Error", "Invalid Plate Number"))
 
             if not slot_number in self.slot_numbers:
                 raise Exception(messagebox.showerror("Error", "Slot number must be in parking slots!"))
