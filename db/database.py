@@ -1,6 +1,8 @@
 import sqlite3
 import os
 
+os.makedirs('./data', exist_ok=True)
+
 DB_PATH = os.path.join("data", "parking.db")
 print(DB_PATH)
 
