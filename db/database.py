@@ -5,7 +5,7 @@ DB_PATH = os.path.join("data", "parking.db")
 print(DB_PATH)
 
 def get_connection() -> sqlite3.Connection:
-    return sqlite3.connect(DB_PATH)
+    return sqlite3.connect(DB_PATH, check_same_thread=False)
 
 def init_db():
     conn = get_connection()
@@ -84,16 +84,16 @@ def init_db():
                    ''')
 
     cursor.execute('''
-        CREATE TABLE IF NOT EXISTS parking_reservations (
+        CREATE TABLE IF NOT EXISTS reservations (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        owner_id INTEGER,
-        car_id INTEGER,
-        slot_id INTEGER,
-        date_reserved TEXT,
-        status TEXT DEFAULT 'pending',
-        FOREIGN KEY(owner_id) REFERENCES car_owners(id),
-        FOREIGN KEY(car_id) REFERENCES registered_cars(id),
-        FOREIGN KEY(slot_id) REFERENCES parking_slots(id)
+        name TEXT NOT NULL,
+        email TEXT NOT NULL,
+        contact_number TEXT NOT NULL,
+        plate_number TEXT NOT NULL,
+        vehicle_type TEXT,
+        reservation_date TEXT,
+        reservation_time TEXT,
+        status TEXT NOT NULL DEFAULT 'PENDING'
         )
     ''')
 

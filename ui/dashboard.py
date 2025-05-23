@@ -9,7 +9,10 @@ from PIL import Image, ImageTk, ImageSequence
 
 from logic.auth import account_login, account_creation
 from logic.models import new_car_owner, get_car_owners, get_owner_vehicles, record_found, get_owner, get_vehicle_type, \
-    park_vehicle, get_parking_slots, unpark_vehicle, get_parkslot_info, assign_vehicle, check_registration
+    park_vehicle, get_parking_slots, unpark_vehicle, get_parkslot_info, assign_vehicle, check_registration, \
+    renew_vehicle, check_plate_number, \
+    get_vehicles, get_vehicle_owner, get_reservations
+
 
 class App(tk.Tk):
     def __init__(self):
@@ -27,7 +30,7 @@ class App(tk.Tk):
         self.grid_rowconfigure(0, weight=1)
         self.grid_columnconfigure(0, weight=1)
 
-        self.show_frame(LoginScreen)
+        self.show_frame(DashboardScreen)
 
     def _initialize_fonts(self):
         font_path = "ui/fonts/Helvetica.ttf"
@@ -231,7 +234,32 @@ class DashboardScreen(tk.Frame):
     def __init__(self, master):
         super().__init__(master, bg="#e6e6e6")
         self.sidebar()
-        self.home_page()
+        self.time()
+        self._initialize_fonts()
+        self.admin_name = self.master.admin_name
+
+        self.frames = {}
+
+        self._initialize_pages()
+
+        self.show_frame(HomePage)
+
+    def _initialize_fonts(self):
+        font_path = "ui/fonts/Helvetica.ttf"
+        self.header_font = tkFont.Font(family=font_path, size=22, weight="bold")
+        self.subheader_font = tkFont.Font(family=font_path, size=10, weight="bold")
+        self.login_font = tkFont.Font(family=font_path, size=10)
+
+    def _initialize_pages(self):
+        for P in (HomePage, ReservationsPage, VehiclesPage):
+            frame = P(self)
+            self.frames[P] = frame
+            frame.grid(row=0, column=1, sticky="nsew")
+
+    def show_frame(self, container, *args, **kwargs):
+        frame = self.frames[container]
+        frame.tkraise()
+        frame.event_generate("<<ShowFrame>>")
 
     def sidebar(self):
         self.grid_columnconfigure(1, weight=1)
@@ -260,12 +288,13 @@ class DashboardScreen(tk.Frame):
 
     def _add_sidebar_buttons(self, frame_sidebar):
         nav = {
-            "Home": self.home_page,
-            "Reservations": self.reservations_page,
-            "Vehicles": self.vehicles_page,
-            "Accounts": self.accounts_page,
+            "Home": lambda: self.show_frame(HomePage),
+            "Reservations": lambda: self.show_frame(ReservationsPage),
+            "Vehicles": lambda: self.show_frame(VehiclesPage),
+            "Accounts": None,
             "Map": None
         }
+
         for i, (name, page) in enumerate(nav.items(), start=2):
             button = tk.Button(
                 frame_sidebar,
@@ -278,625 +307,519 @@ class DashboardScreen(tk.Frame):
                 padx=20,
                 command=page
             )
+
+            if page is None:
+                button.config(state="disabled")
+
             button.grid(row=i, column=0, sticky="ew", padx=10, pady=5)
+
+    def time(self):
+        clock = datetime.now().strftime("%B %d, %Y | %H:%M:%S")
+        self.label_time.config(text=clock)
+        self.label_time.after(1000, self.time)
 
     def _add_footer(self, frame_sidebar):
         frame_footer = tk.Frame(frame_sidebar, bg='#ffcc00')
         frame_footer.grid(row=10, column=0, sticky='ew')
-        footer_label = tk.Label(frame_footer, text="© 2025 JABOL", bg='#ffcc00')
-        footer_label.pack(padx=10, pady=10)
+        self.label_time = tk.Label(frame_footer, bg='#ffcc00', text="Clock Unavailable!", padx=10, pady=10,
+                                   anchor="center")
+        self.label_time.pack()
+
+class HomePage(tk.Frame):
+    def __init__(self, master):
+        super().__init__(master, bg="#e6e6e6", padx=10, pady=10)
+
+        self._initialize_inner_frames()
+
+        self.frames = {
+            "Park Vehicle": self.frame_park_vehicle,
+            "Vehicle Info": self.frame_vehicle_info,
+            "Parking Slots": self.frame_park_slots,
+        }
+
+        self.grid_rowconfigure(0, weight=1)
+        self.grid_columnconfigure(0, weight=1)
+
+        self.previous_slot_status = {}
+        self.park_slot_buttons = {}
+
+        self._initialize_frame_titles()
+        self._initialize_grid()
+        self._initialize_styles()
+        self._create_vehicle_info_labels()
+        self._create_park_vehicle_labels()
+        self._create_park_vehicle_entries()
+        self._park_spacer_and_underline()
+        self._create_binds()
+
+        self.fetch_database(None)
+
+        self._create_slot_buttons()
+        self._create_submit_buttons()
+
+    def _initialize_inner_frames(self):
+        self.frame_park_vehicle = tk.Frame(self, bg='#b80000', padx=10, pady=10)
+        self.frame_vehicle_info = tk.Frame(self, bg='#b80000', padx=10, pady=10)
+        self.frame_park_slots = tk.Frame(self, bg='#b80000', padx=10, pady=10)
+
+    def _initialize_frame_titles(self):
+        for (title, f) in self.frames.items():
+            tk.Frame(f, bg='#b80000', height=50).grid(row=0, column=0, sticky='w')
+            tk.Label(f, text=title, bg='#b80000', fg="white",
+                     font=self.master.header_font).place(x=0, y=0)
+
+    def _initialize_grid(self):
+        self.frames["Park Vehicle"].grid(row=0, column=0, sticky='new')
+        self.frames["Vehicle Info"].grid(row=0, column=2, sticky='new')
+        self.frames["Parking Slots"].grid(row=2, column=0, columnspan=3, sticky='nsew')
+
+    def _initialize_styles(self):
+        combobox_style = ttk.Style()
+        combobox_style.theme_use('default')
+        combobox_style.configure("CustomCombobox.TCombobox", fieldbackground="#b80000", foreground="#ffffff",
+                                 relief="flat", borderwidth=0, highlightcolor="#b80000")
+        combobox_style.map("CustomCombobox.TCombobox", selectbackground=[('!disabled', "#e6e6e6")], selectforeground=[('!disabled', "black")])
+
+    def _create_vehicle_info_labels(self):
+        self.v_info = {
+            "Slot Number": tk.StringVar(),
+            "Plate Number": tk.StringVar(),
+            "Vehicle Type": tk.StringVar(),
+            "Owner Name": tk.StringVar(),
+            "Contact Number": tk.StringVar()
+        }
+
+        for i, (label_text, var) in enumerate(self.v_info.items(), start=1):
+            tk.Label(self.frame_vehicle_info, text=label_text, bg='#b80000', fg="white",
+                     font=self.master.subheader_font, pady=5).grid(row=i, column=0, sticky='w')
+            tk.Label(self.frame_vehicle_info, textvariable=var, bg='#b80000', fg="white",
+                     font=self.master.login_font, pady=5, width=20, anchor='e').grid(row=i, column=2, sticky='e')
+
+            if label_text == "Vehicle Type":
+                self.v_info["Vehicle Type"].set("Select a slot")
+
+    def _create_slot_buttons(self):
+        j = 0
+        i = 1
+
+        for slot in self.park_slots:
+            bgcolor = "green" if slot[2] == 0 else "gray"
+            pkg_text = f"{slot[1]}\nAvailable\n" if slot[2] == 0 else f"{slot[1]}\n{slot[5]}\n{slot[3]}"
+            button = tk.Button(self.frame_park_slots, text=pkg_text, bg=bgcolor, fg="white", width=20, command=lambda x=slot[1]: self.get_slot_info(x),
+                               anchor="center", font=("Helvetica", 10), relief="ridge")
+            button.grid(row=i, column=j, sticky='nsew')
+
+            self.park_slot_buttons[slot[1]] = button
+
+            j += 1
+
+            if j == 5:
+                j = 0
+                i += 1
+
+    def _create_park_vehicle_labels(self):
+        left_labels = ["Owner Name", "Vehicle Type", "Contact Number"]
+        right_labels = ["Plate Number", "Owner Type", "Park Slot"]
+
+        i = 1
 
-    def home_page(self):
-        self.page_home = tk.Frame(self, bg='#e6e6e6', padx=10, pady=10)
-        self.page_home.grid(row=0, column=1, sticky='nsew')
+        for label in left_labels:
 
-        tk.Frame(self.page_home, bg='#e6e6e6', height=25).grid(row=1, column=0, sticky='nsew')
+            tk.Label(self.frame_park_vehicle, text=label, bg='#b80000', fg='white',
+                     font=self.master.subheader_font).grid(row=i, column=0, sticky='w')
+            i += 4
 
-        frame_park_slots = tk.Frame(self.page_home, bg='#b80000', padx=10, pady=10)
-        frame_park_slots.grid(row=2, column=0, sticky='nsew')
+        i = 1
 
-        tk.Frame(frame_park_slots, bg='#b80000', height=50).grid(row=0, column=0, rowspan=1, sticky='nsew')
+        for label in right_labels:
+            tk.Label(self.frame_park_vehicle, text=label, bg='#b80000', fg='white',
+                     font=self.master.subheader_font).grid(row=i, column=2, sticky='w')
 
-        label_park_slots = tk.Label(frame_park_slots, text="Parking Slots", bg='#b80000', fg="white",
-                                    font=self.master.header_font)
-        label_park_slots.place(x=0, y=0)
+            i += 4
 
-        frame_top_ui = tk.Frame(self.page_home, bg='#b80000')
-        frame_top_ui.grid(row= 0, column=0, sticky='nsew')
 
-        frame_car_list = tk.Frame(frame_top_ui, bg='#b80000', padx=10, pady=10)
-        frame_car_list.grid(row=0, column=2, sticky='nsew')
+    def _create_park_vehicle_entries(self):
+        self.dropdown_owner = ttk.Combobox(self.frame_park_vehicle, values=sorted([name[1] for name in get_car_owners()]), state="normal",
+                                      style="CustomCombobox.TCombobox")
+        self.dropdown_owner.grid(row=3, column=0, sticky='nsew')
 
-        label_vehicle_info = tk.Label(frame_car_list, text="Vehicle Info", bg='#b80000', fg="white", font=self.master.header_font)
-        label_vehicle_info.place(x=0, y=0)
+        self.dropdown_plate_number = ttk.Combobox(self.frame_park_vehicle, state='normal', style="CustomCombobox.TCombobox")
+        self.dropdown_plate_number.grid(row=3, column=2, sticky='nsew')
 
-        def load_parking_slots():
-            park_slots = [slot for slot in get_parking_slots()]
-            return park_slots
+        self.entry_vehicle_type = tk.Entry(self.frame_park_vehicle, bg='#b80000', fg="white", relief="flat")
+        self.entry_vehicle_type.grid(row=7, column=0, sticky='nsew')
 
-        def get_park_info(slot_number):
-            result = [info for info in get_parkslot_info(slot_number)]
-            result_contact_number.configure(text="Select a slot")
-
-            for res in (result_park_slot, result_owner_name, result_plate_number, result_vehicle_type):
-                res.configure(text="")
-
-            if result[2] == 1:
-                button_unpark_vehicle.configure(command=lambda x=result[1]: unpark(x))
-                button_unpark_vehicle.configure(state="normal")
-
-                result_park_slot.configure(text=result[1])
-                result_owner_name.configure(text=result[4])
-                result_contact_number.configure(text=result[7])
-                result_plate_number.configure(text=result[5])
-                result_vehicle_type.configure(text=result[3])
-            else:
-                button_unpark_vehicle.configure(state="disabled")
-                dropdown_park_slot.delete(0, 'end')
-                dropdown_park_slot.insert(0, result[1])
-
-        def unpark(slot):
-            if unpark_vehicle(slot):
-                messagebox.showinfo("Notification", f"Parking slot {slot} unparked")
-
-                result_contact_number.configure(text="Select a slot")
-                button_unpark_vehicle.configure(state="disabled")
-
-                for res in (result_park_slot, result_owner_name, result_plate_number, result_vehicle_type):
-                    res.configure(text="")
-
-                park_slots_ui()
-            else:
-                messagebox.showinfo("Notification", f"Parking slot is already available!")
-
-        def car_list_ui():
-            global result_park_slot, result_owner_name, result_contact_number, result_plate_number, result_vehicle_type, button_unpark_vehicle
-
-            tk.Frame(frame_top_ui, bg='#e6e6e6', width=25).grid(row=0, column=1, sticky='nsew')
-
-            tk.Frame(frame_car_list, bg='#b80000', height=50, width=0).grid(row=0, column=0, sticky='w')
-
-            tk.Frame(frame_car_list, bg='#b80000', width=50).grid(row=3, column=1, sticky='nsew')
-
-            label_park_slot = tk.Label(frame_car_list, text="Parking Slot", bg='#b80000', fg="white",
-                                         font=self.master.subheader_font, pady=5)
-            label_park_slot.grid(row=1, column=0, sticky='w')
-
-            result_park_slot = tk.Label(frame_car_list, bg='#b80000', fg="white", font=self.master.login_font, pady=5)
-            result_park_slot.grid(row=1, column=2, sticky='e')
-
-            label_owner_name = tk.Label(frame_car_list, text="Owner Name", bg='#b80000', fg="white", font=self.master.subheader_font, pady=5)
-            label_owner_name.grid(row=2, column=0, sticky='w')
-
-            result_owner_name = tk.Label(frame_car_list, bg='#b80000', fg="white", pady=5, width=20, anchor='e')
-            result_owner_name.grid(row=2, column=2, sticky='e')
-
-            label_contact_number = tk.Label(frame_car_list, text="Contact Number", bg='#b80000', fg="white", font=self.master.subheader_font, pady=5)
-            label_contact_number.grid(row=3, column=0, sticky='w')
-
-            result_contact_number = tk.Label(frame_car_list, text="Select a slot", bg='#b80000', fg='white', pady=5, width=20, anchor='e')
-            result_contact_number.grid(row=3, column=2, sticky='e')
-
-            label_plate_number = tk.Label(frame_car_list, text="Plate Number", bg='#b80000', fg="white", font=self.master.subheader_font, pady=5)
-            label_plate_number.grid(row=4, column=0, sticky='w')
-
-            result_plate_number = tk.Label(frame_car_list, bg='#b80000', fg='white', pady=5, width=20, anchor='e')
-            result_plate_number.grid(row=4, column=2, sticky='e')
-
-            label_vehicle_type = tk.Label(frame_car_list, text="Vehicle Type", bg='#b80000', fg="white", font=self.master.subheader_font, pady=5)
-            label_vehicle_type.grid(row=5, column=0, sticky='w')
-
-            result_vehicle_type = tk.Label(frame_car_list, bg='#b80000', fg='white', pady=5, width=20, anchor='e')
-            result_vehicle_type.grid(row=5, column=2, sticky='e')
-
-            tk.Frame(frame_car_list, bg='#b80000', height=36).grid(row=6, column=0, sticky='nsew')
-
-            button_unpark_vehicle = tk.Button(frame_car_list, text="Unpark Vehicle", bg='#ffcc00', fg='black',
-                                            relief="flat", font=self.master.subheader_font, state="disabled")
-            button_unpark_vehicle.grid(row=7, column=0, columnspan=3, sticky='nsew')
-
-        def park_slots_ui():
-
-            label_car_details = tk.Label(frame_park_slots, text="Select a slot", font=self.master.subheader_font, bg='#b80000', fg='white')
-            label_car_details.grid(row=0, column=3, columnspan=2, sticky='e')
-
-            j = 0
-            i = 2
-
-            for slot in load_parking_slots():
-                bgcolor = "green" if slot[2] == 0 else "red"
-                pkg_text = f"{slot[1]}\nAvailable\n" if slot[2] == 0 else f"{slot[1]}\n{slot[5]}\n{slot[3]}"
-                btn_cmd = lambda x=slot[1]: get_park_info(x)
-                button = tk.Button(frame_park_slots, text=pkg_text, bg=bgcolor, fg="white", width=20, command=btn_cmd,
-                                   anchor="center", font=("Helvetica", 10), relief="ridge")
-                button.grid(row=i, column=j, sticky='nsew')
-
-                j += 1
-
-                if j == 5:
-                    j = 0
-                    i += 1
-
-        def park_vehicle_ui():
-            global dropdown_park_slot
-
-            def check_results(event=None):
-                dropdown_vehicle.delete(0, tk.END)
-                entry_contact_number.delete(0, tk.END)
-
-                owner_name = dropdown_owner.get()
-
-                if record_found(owner_name):
-                    owner_details = get_owner(owner_name)
-
-                    dropdown_type.set(owner_details[2])
-                    entry_contact_number.insert(0, owner_details[3])
-
-                    update_vehicles()
-
-            def update_owners(event=None):
-                owner_name = dropdown_owner.get()
-
-                for name in owners:
-                    if owner_name.lower() == name.lower():
-                        dropdown_owner.set(name)
-                        check_results()
-
-            def update_vehicles(event=None):
-                selected_owner = dropdown_owner.get()
-                vehicles = get_owner_vehicles(selected_owner)
-
-                if vehicles:
-                    vehicles = sorted([vehicle[2] for vehicle in vehicles])
-                    dropdown_vehicle.config(values=vehicles, state="normal")
-                else:
-                    dropdown_vehicle.set('')
-                    dropdown_vehicle.config(state="disabled")
-
-            def update_vehicle_type(event=None):
-                plate_number = dropdown_vehicle.get()
-                entry_vehicle_type.delete(0, tk.END)
-
-                entry_vehicle_type.insert(0, get_vehicle_type(plate_number))
-
-            def submit_park_vehicle(event=None):
-                try:
-                    slot_number = dropdown_park_slot.get()
-                    vehicle_type = entry_vehicle_type.get()
-                    owner_name = dropdown_owner.get()
-                    plate_number = dropdown_vehicle.get()
-                    status_type = dropdown_type.get()
-                    contact_number = entry_contact_number.get()
-
-                    if not all([slot_number, vehicle_type, owner_name, plate_number, status_type, contact_number]):
-                        raise Exception("Please enter all required fields!", messagebox.showerror("Error", "Please enter all required fields!"))
-
-                    if not check_registration(plate_number):
-                        raise Exception(messagebox.showerror("Error", "Vehicle Pass is Expired!"))
-
-                    if not slot_number in park_slots:
-                        raise Exception(messagebox.showerror("Error", "Slot number must be in parking slots!"))
-
-                    if park_vehicle(self.master.admin_name, slot_number, vehicle_type, owner_name, plate_number, status_type, contact_number):
-                        messagebox.showinfo("Success", f"{vehicle_type} | {plate_number}\nParked Successfully!")
-
-                        for e in (dropdown_owner, dropdown_vehicle, entry_vehicle_type, entry_contact_number,
-                                  dropdown_type, dropdown_park_slot):
-                            e.delete(0, tk.END)
-
-                        park_slots_ui()
-                except Exception as e:
-                    print(f"Error: {e.args[0]}")
-
-            frame_park_vehicle = tk.Frame(frame_top_ui, bg='#b80000', padx=10, pady=10)
-            frame_park_vehicle.grid(row=0, column=0, sticky='nw')
-
-            label_park_title = tk.Label(frame_park_vehicle, text="Park Vehicle", font=self.master.header_font,
-                                        bg='#b80000', fg='#ffffff')
-            label_park_title.grid(row=0, column=0, sticky='w')
-
-            tk.Frame(frame_park_vehicle, bg='#b80000', height=15).grid(row=1, column=0, sticky='nsew')
-
-            combobox_style = ttk.Style()
-            combobox_style.theme_use('default')
-            combobox_style.configure("CustomCombobox.TCombobox", fieldbackground="#b80000", foreground="#ffffff",
-                                     relief="flat", borderwidth=0)
-            combobox_style.map("CustomCombobox.TCombobox", selectbackground=[('!disabled', "#ffcc00")])
-
-            owners = sorted([name[1] for name in get_car_owners()])
-
-            label_combo_owner = tk.Label(frame_park_vehicle, text="Owner Name", bg='#b80000', fg="white",
-                                         font=self.master.subheader_font)
-            label_combo_owner.grid(row=2, column=0, sticky='w')
-
-            dropdown_owner = ttk.Combobox(frame_park_vehicle, values=owners, state="normal",
-                                          style="CustomCombobox.TCombobox")
-            dropdown_owner.grid(row=3, column=0, sticky='nsew')
-            dropdown_owner.bind("<Return>", update_owners)
-            dropdown_owner.bind("<<ComboboxSelected>>", check_results)
-
-            tk.Canvas(frame_park_vehicle, bg="white", height=0, width=200, highlightthickness=0).grid(row=4, column=0,
-                                                                                                      sticky='nsew')
-
-            tk.Frame(frame_park_vehicle, bg='#b80000', width=100).grid(row=1, column=1, sticky='nsew')
-
-            label_plate_number = tk.Label(frame_park_vehicle, text="Plate Number", bg='#b80000', fg='white',
-                                          font=self.master.subheader_font)
-            label_plate_number.grid(row=2, column=2, sticky='w')
-
-            dropdown_vehicle = ttk.Combobox(frame_park_vehicle, state='normal', style="CustomCombobox.TCombobox")
-            dropdown_vehicle.grid(row=3, column=2, sticky='nsew')
-            dropdown_vehicle.bind("<<ComboboxSelected>>", update_vehicle_type)
-
-            tk.Canvas(frame_park_vehicle, bg="white", height=0, width=200, highlightthickness=0).grid(row=4, column=2,
-                                                                                                      sticky='nsew')
-            tk.Frame(frame_park_vehicle, bg='#b80000', height=15).grid(row=5, column=0, sticky='nsew')
-
-            label_vehicle_type = tk.Label(frame_park_vehicle, text="Vehicle Type", bg='#b80000', fg='white',
-                                          font=self.master.subheader_font)
-            label_vehicle_type.grid(row=6, column=0, sticky='w')
-
-            entry_vehicle_type = tk.Entry(frame_park_vehicle, bg='#b80000', fg="white", relief="flat")
-            entry_vehicle_type.grid(row=7, column=0, sticky='nsew')
-
-            tk.Canvas(frame_park_vehicle, bg="white", height=0, width=200, highlightthickness=0).grid(row=8, column=0,
-                                                                                                      sticky='nsew')
-
-            label_type = tk.Label(frame_park_vehicle, text="Type", bg='#b80000', fg="white",
-                                  font=self.master.subheader_font)
-            label_type.grid(row=6, column=2, sticky='w')
-
-            dropdown_type = ttk.Combobox(frame_park_vehicle, values=["Student", "Faculty", "Staff", "Visitor"],
+        self.dropdown_type = ttk.Combobox(self.frame_park_vehicle, values=("Student", "Faculty", "Staff", "Visitor"),
                                          style="CustomCombobox.TCombobox")
-            dropdown_type.grid(row=7, column=2, sticky='nsew')
+        self.dropdown_type.grid(row=7, column=2, sticky='nsew')
 
-            tk.Canvas(frame_park_vehicle, bg="white", height=0, width=200, highlightthickness=0).grid(row=8, column=2,
-                                                                                                      sticky='w')
-            tk.Frame(frame_park_vehicle, bg='#b80000', height=15, ).grid(row=9, column=0, sticky='nsew')
+        self.entry_contact_number = tk.Entry(self.frame_park_vehicle, bg='#b80000', fg="white", relief="flat")
+        self.entry_contact_number.grid(row=11, column=0, sticky='nsew')
 
-            label_contact_number = tk.Label(frame_park_vehicle, text="Contact Number", bg='#b80000', fg="white",
-                                            font=self.master.subheader_font)
-            label_contact_number.grid(row=10, column=0, sticky='w')
+        self.dropdown_park_slot = ttk.Combobox(self.frame_park_vehicle, values=("park_slots", "temporary"), style="CustomCombobox.TCombobox")
+        self.dropdown_park_slot.grid(row=11, column=2, sticky='nsew')
 
-            entry_contact_number = tk.Entry(frame_park_vehicle, bg='#b80000', fg="white", relief="flat")
-            entry_contact_number.grid(row=11, column=0, sticky='nsew')
+    def _create_submit_buttons(self):
+        self.park_button = tk.Button(self.frame_park_vehicle, text="Park Vehicle", bg='#ffcc00', fg='black',
+                  relief="flat", command=self.submit_park, font=self.master.subheader_font)
+        self.park_button.grid(row=14, column=0, columnspan=3, sticky='nsew')
 
-            tk.Canvas(frame_park_vehicle, bg="white", height=0, width=200, highlightthickness=0).grid(row=12, column=0,
-                                                                                                      sticky='nsew')
+        self.unpark_button = tk.Button(self.frame_vehicle_info, text="Unpark Vehicle", bg='#ffcc00', fg='black',
+                                     relief="flat", command=self.submit_unpark, font=self.master.subheader_font)
+        self.unpark_button.grid(row=7, column=0, columnspan=3, sticky='nsew')
 
-            label_park_slot = tk.Label(frame_park_vehicle, text="Park Slot", bg='#b80000', fg="white",
-                                       font=self.master.subheader_font)
-            label_park_slot.grid(row=10, column=2, sticky='w')
+    def _create_binds(self):
+        self.bind("<<ShowFrame>>", self.fetch_database)
+        self.dropdown_owner.bind("<<ComboboxSelected>>", self.filter_owner_vehicles)
+        self.dropdown_owner.bind("<Return>", self.filter_owner_vehicles)
+        self.dropdown_owner.bind("<<ComboboxSelected>>", self.auto_fill_entries, add='+')
+        self.dropdown_owner.bind("<Return>", self.auto_fill_entries, add='+')
+        self.dropdown_plate_number.bind("<<ComboboxSelected>>", self.auto_fill_entries)
+        self.dropdown_plate_number.bind("<Return>", self.auto_fill_entries)
 
-            park_slots = [slot[1] for slot in get_parking_slots()]
+    def _park_spacer_and_underline(self):
 
-            dropdown_park_slot = ttk.Combobox(frame_park_vehicle, values=park_slots, style="CustomCombobox.TCombobox")
-            dropdown_park_slot.grid(row=11, column=2, sticky='nsew')
-            dropdown_park_slot.bind("<Return>", submit_park_vehicle)
+        i = 3
 
-            tk.Canvas(frame_park_vehicle, bg="white", height=0, width=200, highlightthickness=0).grid(row=12, column=2,
-                                                                                                      sticky='nsew')
+        while i <= 12:
+            tk.Canvas(self.frame_park_vehicle, bg="white", height=0,
+                      width=200, highlightthickness=0).grid(row=i, column=0,sticky='sew')
+            tk.Canvas(self.frame_park_vehicle, bg="white", height=0,
+                      width=200, highlightthickness=0).grid(row=i, column=2, sticky='sew')
 
-            tk.Frame(frame_park_vehicle, bg='#b80000', height=25).grid(row=13, column=0, sticky='nsew')
+            tk.Frame(self.frame_park_vehicle, bg='#b80000', height=15).grid(row=i+1, column=2, sticky='nsew')
 
-            button_park_vehicle = tk.Button(frame_park_vehicle, text="Park Vehicle", bg='#ffcc00', fg='black',
-                                            relief="flat", command=submit_park_vehicle, font=self.master.subheader_font)
-            button_park_vehicle.grid(row=14, column=0, columnspan=4, sticky='nsew')
+            i += 4
 
-        park_vehicle_ui()
-        car_list_ui()
-        park_slots_ui()
+        tk.Frame(self.frame_park_vehicle, bg='#b80000', width=100).grid(row=1, column=1, sticky='ew')
+        tk.Frame(self.frame_park_vehicle, bg='#b80000', height=10).grid(row=13, column=0, sticky='nsew')
 
-    def reservations_page(self):
-        self.page_reservations = tk.Frame(self, bg='#e6e6e6')
-        self.page_reservations.grid(row=0, column=1, sticky='nsew')
+        self.frame_park_vehicle.columnconfigure(0, weight=2)
+        self.frame_park_vehicle.columnconfigure(2, weight=2)
 
-        self.label_placeholder = tk.Label(self.page_reservations, text="RESERVATIONS PAGE", bg='#e6e6e6',
-                                          font=self.master.header_font)
-        self.label_placeholder.grid(row=0, column=0, sticky='nsew')
+        tk.Frame(self.frame_vehicle_info, bg='#b80000', width=15).grid(row=3, column=1, sticky='nsew')
+        tk.Frame(self.frame_vehicle_info, bg='#b80000', height=29).grid(row=6, column=1, sticky='nsew')
 
-    def vehicles_page(self):
-        self.page_vehicles = tk.Frame(self, bg='#e6e6e6', padx=10, pady=10)
-        self.page_vehicles.grid(row=0, column=1, sticky='nsew')
+        self.frame_vehicle_info.columnconfigure(2, weight=2)
 
-        # renew_vehicle_ui
-        # edit_vehicle_ui
-        # tree_view_vehicle_with_search
+        for i in range(0, 5):
+            self.frame_park_slots.columnconfigure(i, weight=2)
 
-        def register_vehicle_ui():
+        for i in range(1, 6):
+            self.frame_park_slots.rowconfigure(i, weight=1)
 
-            def register():
-                try:
-                    owner_name = entry_owner_name.get()
-                    plate_number = entry_plate_number.get()
-                    vehicle_type = entry_vehicle_type.get()
-                    expiration_date = entry_valid_till.get()
+        # tk.Frame(self, bg='#e6e6e6', width=15).grid(row=0, column=1, sticky='n')
+        tk.Frame(self, bg='#e6e6e6', height=15).grid(row=1, column=0, sticky='ns')
 
-                    ph_offset = timezone(timedelta(hours=8))
-                    ph_time = datetime.now(ph_offset)
+        self.grid_columnconfigure(0, weight=3)
+        self.grid_rowconfigure(0, weight=2)
+        self.grid_columnconfigure(1, weight=1)
+        self.grid_rowconfigure(1, weight=0)
+        self.grid_columnconfigure(2, weight=2)
+        self.grid_rowconfigure(2, weight=10)
 
-                    if not get_owner(owner_name):
-                        raise Exception(messagebox.showerror("Error", "Only bonafide students, staffs,\nand alumni can register."))
+    def fetch_database(self, event):
+        self.car_owners = sorted([name[1] for name in get_car_owners()])
+        self.vehicles = sorted([plate[2] for plate in get_vehicles()])
+        self.park_slots = sorted([slot for slot in get_parking_slots()])
+        self.slot_numbers = [slot[1] for slot in self.park_slots]
 
-                    if not is_valid_plate_number(plate_number):
-                        raise Exception(messagebox.showerror("Error", "Invalid Plate Number"))
+        self.dropdown_owner.config(values=self.car_owners)
+        self.dropdown_plate_number.config(values=self.vehicles)
+        self.dropdown_park_slot.config(values=self.slot_numbers)
 
-                    owner_name = get_owner(owner_name)[1]
+        for slot in self.park_slots:
+            slot_number = slot[1]
+            slot_status = slot[2]
 
-                    if assign_vehicle(owner_name, plate_number, vehicle_type, expiration_date):
-                        messagebox.showinfo("Success", "Vehicle Registered")
-                        for entry in (entry_owner_name, entry_plate_number, entry_vehicle_type, entry_valid_till):
-                            entry.delete(0, tk.END)
-                        entry_valid_till.insert(0, ph_time.strftime("%m/%d/%Y"))
-                    else:
-                        messagebox.showerror("Error", "Vehicle not Registered")
+            prev_status = self.previous_slot_status.get(slot_number)
 
-                except Exception as e:
-                    pass
+            if prev_status != slot_status:
+                bgcolor = "green" if slot_status == 0 else ("gray")
+                pkg_text = f"{slot_number}\nAvailable\n" if slot_status == 0 else f"{slot_number}\n{slot[5]}\n{slot[3]}"
 
-            frame_register_vehicle = tk.Frame(self.page_vehicles, bg='#b80000', padx=10, pady=10, width=500)
-            frame_register_vehicle.grid(row=0, column=0, sticky='nw')
+                if slot_number in self.park_slot_buttons:
+                    self.park_slot_buttons[slot_number].config(text=pkg_text, bg=bgcolor)
 
-            tk.Frame(frame_register_vehicle, bg='#b80000', height=50).grid(row=0, column=0, sticky='nsew')
+            self.previous_slot_status[slot_number] = slot_status
 
-            label_register_vehicle = tk.Label(frame_register_vehicle, text="Register Vehicle", font=self.master.header_font,
-                     bg='#b80000', fg='#ffffff')
-            label_register_vehicle.place(x=0, y=0)
+    def get_slot_info(self, slot_number):
 
-            label_owner_name = tk.Label(frame_register_vehicle, bg='#b80000', fg="white", text="Owner Name", font=self.master.subheader_font)
-            label_owner_name.grid(row=1, column=0, sticky='w')
+        for res in (self.v_info):
+            self.v_info[res].set("")
 
-            entry_owner_name = tk.Entry(frame_register_vehicle, bg='#b80000', fg="white", relief="flat")
-            entry_owner_name.grid(row=2, column=0, columnspan=3, sticky='nsew')
+        if self.park_slot_buttons[slot_number]:
 
-            tk.Canvas(frame_register_vehicle, bg="white", height=0, width=300, highlightthickness=0).grid(row=3, column=0, columnspan=3,
-                                                                                                      sticky='nsew')
+            result = next((res for res in self.park_slots if res[1] == slot_number))
 
-            tk.Frame(frame_register_vehicle, bg='#b80000', height=15).grid(row=4, column=0, sticky='nsew')
+            self.v_info["Slot Number"].set(result[1])
+            self.v_info["Plate Number"].set(result[5])
+            self.v_info["Vehicle Type"].set(result[3])
+            self.v_info["Owner Name"].set(result[4])
+            self.v_info["Contact Number"].set(result[7])
+
+            self.unpark_button.configure(state="normal")
 
-            label_plate_number = tk.Label(frame_register_vehicle, bg='#b80000', fg="white", text="Plate Number", font=self.master.subheader_font)
-            label_plate_number.grid(row=5, column=0, sticky='w')
+            if result[5] is None:
+                self.unpark_button.configure(state="disabled")
+                self.dropdown_park_slot.delete(0, "end")
+                self.dropdown_park_slot.insert(0, result[1])
+
+    def filter_owner_vehicles(self, event):
+        owner_name = self.dropdown_owner.get()
 
-            entry_plate_number = tk.Entry(frame_register_vehicle, bg='#b80000', fg="white", relief="flat")
-            entry_plate_number.grid(row=6, column=0, sticky='nsew')
+        self.dropdown_plate_number.config(values=sorted([plate[2] for plate in get_owner_vehicles(owner_name)]))
 
-            tk.Canvas(frame_register_vehicle, bg="white", height=0, width=125, highlightthickness=0).grid(row=7, column=0,
-                                                                                                          sticky='nsew')
+    def auto_fill_entries(self, event):
+        owner_name = self.dropdown_owner.get()
 
-            tk.Frame(frame_register_vehicle, bg='#b80000', height=15).grid(row=8, column=0, sticky='nsew')
+        owner_details = get_owner(owner_name)
+        vehicle_details = get_vehicle_type(self.dropdown_plate_number.get())
 
-            tk.Frame(frame_register_vehicle, bg='#b80000', width=50).grid(row=7, column=1, sticky='nsew')
+        if owner_details:
+            for entry in (self.dropdown_owner, self.dropdown_type, self.entry_contact_number):
+                entry.delete(0, tk.END)
 
-            label_vehicle_type = tk.Label(frame_register_vehicle, bg='#b80000', fg="white", text="Vehicle Type", font=self.master.subheader_font)
-            label_vehicle_type.grid(row=5, column=2, sticky='w')
+            self.dropdown_owner.insert(0, owner_details[1])
+            self.dropdown_type.insert(0, owner_details[2])
+            self.entry_contact_number.insert(0, owner_details[3])
 
-            entry_vehicle_type = tk.Entry(frame_register_vehicle, bg='#b80000', fg="white", relief="flat")
-            entry_vehicle_type.grid(row=6, column=2, sticky='nsew')
+        if vehicle_details:
+            self.entry_vehicle_type.delete(0, tk.END)
+            self.entry_vehicle_type.insert(0, vehicle_details[0])
 
-            tk.Canvas(frame_register_vehicle, bg="white", height=0, width=125, highlightthickness=0).grid(row=7, column=2,
-                                                                                                          sticky='nsew')
+    def submit_park(self):
+        try:
+            slot_number = self.dropdown_park_slot.get()
+            vehicle_type = self.entry_vehicle_type.get()
+            owner_name = self.dropdown_owner.get()
+            plate_number = self.dropdown_plate_number.get()
+            status_type = self.dropdown_type.get()
+            contact_number = self.entry_contact_number.get()
 
-            tk.Frame(frame_register_vehicle, bg='#b80000', height=15).grid(row=8, column=0, sticky='nsew')
+            if not all([slot_number, vehicle_type, owner_name, plate_number, status_type, contact_number]):
+                raise Exception("Please enter all required fields!",
+                                messagebox.showerror("Error", "Please enter all required fields!"))
 
-            label_valid_till = tk.Label(frame_register_vehicle, bg='#b80000', fg="white", text="Valid Until", font=self.master.subheader_font)
-            label_valid_till.grid(row=9, column=0, sticky='w')
+            if not slot_number in self.slot_numbers:
+                raise Exception(messagebox.showerror("Error", "Slot number must be in parking slots!"))
 
-            cal_style = ttk.Style(frame_register_vehicle)
-            cal_style.theme_use('clam')
+            if not check_registration(plate_number):
+                raise Exception(messagebox.showerror("Error", "Vehicle Pass is Expired!"))
 
-            cal_style.configure("Calendar.TEntry", fieldbackground='#b80000', foreground='white', borderwidth=0, bd=0, relief="flat", font=self.master.login_font)
+            if park_vehicle(slot_number, vehicle_type, owner_name, plate_number, status_type,
+                            contact_number):
+                messagebox.showinfo("Success", f"{vehicle_type} | {plate_number}\nParked Successfully!")
+                self.fetch_database(None)
 
-            entry_valid_till = DateEntry(frame_register_vehicle, width=12, takefocus=False, background='#b80000', style="Calendar.TEntry", relief="flat", year=2025,
-                                       date_pattern="mm/dd/yyyy", font=self.master.login_font)
-            entry_valid_till.grid(row=10, column=0, columnspan=3, sticky='nsew')
+                for e in (self.dropdown_owner, self.dropdown_plate_number, self.entry_vehicle_type, self.entry_contact_number,
+                          self.dropdown_type, self.dropdown_park_slot):
+                    e.delete(0, tk.END)
+        except Exception as e:
+            print(f"Error: {e.args[0]}")
 
-            label_date_format = tk.Label(frame_register_vehicle, text="MM/DD/YYYY", bg="#b80000", fg="white")
-            label_date_format.grid(row=10, column=2, sticky='e', padx=3, pady=10)
+    def submit_unpark(self):
+        try:
+            slot = self.v_info["Slot Number"].get()
 
-            tk.Canvas(frame_register_vehicle, bg="white", height=0, width=300, highlightthickness=0).grid(row=11,
-                                                                                                          column=0, columnspan=3,
-                                                                                                          sticky='nsew')
+            if unpark_vehicle(slot):
+                messagebox.showinfo("Success", f"Slot {slot}\nVehicle Unparked!")
+                self.fetch_database(None)
 
-            tk.Frame(frame_register_vehicle, bg='#b80000', height=25).grid(row=12, column=0, sticky='nsew')
+                for v_info in self.v_info.values():
+                    v_info.set("")
 
-            button_register_vehicle = tk.Button(frame_register_vehicle, text="Register Vehicle", bg='#ffcc00', fg='black',
-                                            relief="flat", command=register, font=self.master.subheader_font)
-            button_register_vehicle.grid(row=13, column=0, columnspan=3, sticky='nsew')
+                self.v_info["Vehicle Type"].set("Select a slot")
+                self.unpark_button.configure(state="disabled")
 
-        register_vehicle_ui()
 
-    def accounts_page(self):
-        self.page_accounts = tk.Frame(self, bg='#e6e6e6')
-        self.page_accounts.grid(row=0, column=1, sticky='nsew')
+        except Exception as e:
+            print(f"Error: {e.args[0]}")
 
-        # Function to load owner data
-        def load_owner_data():
-            for row in tree.get_children():
-                tree.delete(row)
-            owners = get_car_owners()  # Assume this function gets the list of owners
-            for owner in owners:
-                tree.insert("", tk.END, values=owner)
+class ReservationsPage(tk.Frame):
+    def __init__(self, master):
+        super().__init__(master, bg="#e6e6e6", padx=10, pady=10)
 
-        def test_tree_ui():
-            global tree
+        self.grid_rowconfigure(0, weight=1)
+        self.grid_columnconfigure(0, weight=1)
 
-            # Function to sort the data in the Treeview based on the clicked column
-            def sort_treeview(column, reverse=False):
-                """Sort the Treeview data based on the clicked column."""
-                rows = [(tree.item(item)["values"], item) for item in tree.get_children()]
-                rows.sort(key=lambda x: x[0][column], reverse=reverse)
+        self._initialize_inner_frames()
+        self._initialize_frame_titles()
+        self._initialize_grid()
+        self._initialize_detail_labels()
+        self._initialize_table_style()
+        self._initialize_legend()
+        self._initialize_action_widgets()
+        self._initialize_buttons()
+        self._create_table()
+        self.fetch_reservations()
 
-                # Rearranging the rows in the Treeview based on the sorted data
-                for index, (_, item) in enumerate(rows):
-                    tree.move(item, '', index)
+    def _initialize_inner_frames(self):
+        self.reservation_manager = tk.Frame(self, bg="#b80000", padx=10, pady=10)
+        self.reservation_details = tk.Frame(self.reservation_manager, bg="#8f0000", padx=10, pady=10)
+        self.reservations_actions = tk.Frame(self.reservation_manager, bg='#8f0000', padx=10, pady=10)
 
-                return not reverse
+    def _initialize_legend(self):
+        self.frame_legend = tk.Frame(self.reservation_manager, bg="#b80000")
+        self.frame_legend.grid(row=0, column=1, sticky="nsew")
 
-            # Function to handle column click and toggle sorting
-            def on_column_click(column):
-                nonlocal sort_reverse
-                sort_reverse = sort_treeview(column, sort_reverse)
+        tk.Frame(self.frame_legend, bg="#b80000", height=8).grid(row=0, column=0, sticky="nsew")
 
-            style = ttk.Style(self.page_accounts)
-            style.theme_use("alt")
-            style.configure("Treeview.Heading", font=('Helvetica', 10, 'bold'), background="#b80000",
-                            foreground="white", relief="flat")
+        self.square_pending = tk.Canvas(self.frame_legend, bg="#fe9705", width=5, height=5)
+        self.square_pending.grid(row=1, column=1, sticky="nsew")
 
-            # Frame for Treeview
-            frame_tree = tk.Frame(self.page_accounts, bg='#e6e6e6')
-            frame_tree.grid(row=1, column=0, sticky='nsew')
+        self.label_pending = tk.Label(self.frame_legend, bg="#b80000", fg="white", text="Pending", font=self.master.login_font, padx=10)
+        self.label_pending.grid(row=1, column=2, sticky="nw")
 
-            # Create Treeview
-            tree = ttk.Treeview(frame_tree, columns=("ID", "Owner Name", "Email Address", "Type", "Contact Number"),
-                                show="headings")
-            tree.heading("#1", text="ID", anchor="w", command=lambda: on_column_click(0))
-            tree.heading("#2", text="Owner Name", anchor="w", command=lambda: on_column_click(1))
-            tree.heading("#3", text="Email Address", anchor="w", command=lambda: on_column_click(2))
-            tree.heading("#4", text="Type", anchor="w", command=lambda: on_column_click(3))
-            tree.heading("#5", text="Contact Number", anchor="w", command=lambda: on_column_click(4))
+        self.square_approved = tk.Canvas(self.frame_legend, bg="#3ac430", width=5, height=5)
+        self.square_approved.grid(row=1, column=3, sticky="nsew")
 
-            # Set column widths
-            tree.column("#1", width=50, stretch=tk.NO)
-            tree.column("#2", width=150)
-            tree.column("#3", width=200)
-            tree.column("#4", width=100)
-            tree.column("#5", width=120)
+        self.label_approved = tk.Label(self.frame_legend, bg="#b80000", fg="white", text="Approved", font=self.master.login_font, padx=10)
+        self.label_approved.grid(row=1, column=4, sticky="nw")
 
-            # Layout the Treeview
-            tree.grid(row=0, column=0, sticky='nsew')
+        self.square_rejected = tk.Canvas(self.frame_legend, bg="#a9a9a9", width=5, height=5)
+        self.square_rejected.grid(row=1, column=5, sticky="nsew")
 
-            # Scrollbar setup
-            scrollbar = ttk.Scrollbar(frame_tree, orient="vertical", command=tree.yview)
-            tree.configure(yscrollcommand=scrollbar.set)
-            scrollbar.grid(row=0, column=1, sticky='nsew')
+        self.label_rejected = tk.Label(self.frame_legend, bg="#b80000", fg="white", text="Rejected", font=self.master.login_font, padx=10)
+        self.label_rejected.grid(row=1, column=6, sticky="nw")
 
-            # Refresh Button
-            button_refresh = tk.Button(frame_tree, text="Refresh", command=load_owner_data)
-            button_refresh.grid(row=1, column=0, sticky='nsew')
+        for i in range(1, 7, 2):
+            self.frame_legend.columnconfigure(i, weight=1)
 
-            # Initial data load
-            load_owner_data()
+    def _initialize_frame_titles(self):
+        tk.Frame(self.reservation_manager, bg="#b80000", height=50).grid(row=0, column=0, sticky="w")
+        tk.Label(self.reservation_manager, text="Manage Reservations", bg="#b80000", fg="white", font=self.master.header_font).place(x=0, y=0)
 
-            # Sorting order flag (True for descending, False for ascending)
-            sort_reverse = False
+        tk.Frame(self.reservation_details, bg="#8f0000", height=35).grid(row=0, column=0, sticky="w")
+        tk.Label(self.reservation_details, text="Reservation Details", bg="#8f0000", fg="white", font=("Helvetica", 16, "bold")).place(x=0, y=0)
 
-        def new_admin_ui():
-            self.frame_new_admin = tk.Frame(self.page_accounts, bg='#e6e6e6')
-            self.frame_new_admin.grid(row=0, column=0, sticky='nsew')
+        tk.Frame(self.reservations_actions, bg="#8f0000", height=35).grid(row=0, column=0, sticky="w")
+        tk.Label(self.reservations_actions, text="Actions", bg="#8f0000", fg="white", font=("Helvetica", 16, "bold")).place(x=0, y=0)
 
-            self.label_admin_name = tk.Label(self.frame_new_admin, text="Admin Name", bg='#e6e6e6')
-            self.label_admin_name.grid(row=0, column=0)
+    def _initialize_grid(self):
+        self.reservation_manager.grid(column=0, row=0, sticky="nsew")
+        self.reservation_details.grid(column=0, row=3, sticky="nsew")
+        self.reservations_actions.grid(row=3, column=1, sticky="nsew")
 
-            self.entry_admin_name = tk.Entry(self.frame_new_admin, bg='#e6e6e6')
-            self.entry_admin_name.grid(row=0, column=1)
+        self.reservation_manager.columnconfigure(0, weight=1)
+        self.reservation_manager.columnconfigure(1, weight=1)
+        self.reservation_manager.rowconfigure(4, weight=1)
 
-            self.label_admin_email = tk.Label(self.frame_new_admin, text="Admin Email", bg='#e6e6e6')
-            self.label_admin_email.grid(row=1, column=0)
+        for i in range(0, 8):
+            self.reservation_details.rowconfigure(i, weight=1)
 
-            self.entry_admin_email = tk.Entry(self.frame_new_admin, bg='#e6e6e6')
-            self.entry_admin_email.grid(row=1, column=1)
+        self.reservation_details.columnconfigure(2, weight=1)
 
-            self.label_admin_user = tk.Label(self.frame_new_admin, text="Username", bg='#e6e6e6')
-            self.label_admin_user.grid(row=2, column=0)
+    def _initialize_action_widgets(self):
+        label_select_slot = tk.Label(self.reservations_actions, text="Select a slot:", font=self.master.subheader_font, bg="#b80000", fg="white")
+        label_select_slot.grid(row=1, column=0, sticky="w")
 
-            self.entry_admin_user = tk.Entry(self.frame_new_admin, bg='#e6e6e6')
-            self.entry_admin_user.grid(row=2, column=1)
+    def _initialize_detail_labels(self):
+        self.details = {
+            "Owner Name": tk.StringVar(),
+            "Email": tk.StringVar(),
+            "Contact Number": tk.StringVar(),
+            "Plate Number": tk.StringVar(),
+            "Vehicle Type": tk.StringVar(),
+            "Reservation Date": tk.StringVar(),
+            "Reservation Time": tk.StringVar(),
+            "Status": tk.StringVar()
+        }
 
-            self.label_admin_password = tk.Label(self.frame_new_admin, text="Password", bg='#e6e6e6')
-            self.label_admin_password.grid(row=3, column=0)
+        for i, (label_text, var) in enumerate(self.details.items(), start=1):
+            tk.Label(self.reservation_details, text=label_text, bg='#8f0000', fg="white",
+                     font=self.master.subheader_font, pady=5).grid(row=i, column=0, sticky='w')
+            tk.Label(self.reservation_details, textvariable=var, bg='#8f0000', fg="white",
+                     font=self.master.login_font, pady=5, width=20, anchor='e').grid(row=i, column=2, sticky='e')
 
-            self.entry_admin_password = tk.Entry(self.frame_new_admin, bg='#e6e6e6')
-            self.entry_admin_password.grid(row=3, column=1)
+    def _initialize_buttons(self):
+        pass
 
-            self.label_master_password = tk.Label(self.frame_new_admin, text="Master Password", bg='#e6e6e6')
-            self.label_master_password.grid(row=4, column=0)
+    def _initialize_table_style(self):
+        style = ttk.Style()
 
-            self.entry_master_password = tk.Entry(self.frame_new_admin, bg='#e6e6e6')
-            self.entry_master_password.grid(row=4, column=1)
+        style.theme_use("default")
 
-            def submit_new_admin():
-                try:
-                    admin_name = self.entry_admin_name.get()
-                    admin_email = self.entry_admin_email.get()
-                    admin_user = self.entry_admin_user.get()
-                    admin_password = self.entry_admin_password.get()
-                    master_password = self.entry_master_password.get()
+        style.configure("Custom.Treeview", background="#8f0000", foreground="white", fieldbackground="#8f0000",
+                        font=self.master.login_font, rowheight=30, relief="ridge")
 
-                    if account_creation(admin_user, admin_password, admin_name, admin_email, master_password):
-                        messagebox.showinfo("Notification", "Successfully added " + admin_name)
+        style.configure("Custom.Treeview.Heading", background="#ffcc00", foreground="black", font=self.master.subheader_font,
+                        relief="raised", borderwidth=1)
 
-                        self.entry_admin_name.delete(0, tk.END)
-                        self.entry_admin_email.delete(0, tk.END)
-                        self.entry_admin_user.delete(0, tk.END)
-                        self.entry_admin_password.delete(0, tk.END)
-                        self.entry_master_password.delete(0, tk.END)
-                except Exception as e:
-                    messagebox.showerror("Error!", f"Error: {e}")
+        style.map("Custom.Treeview", background=[("selected", "#3390FF")], foreground=[("selected", "white")], bordercolor=[("selected", "black")], borderwidth=[("selected", 2)])
 
-            self.button_new_admin = tk.Button(self.frame_new_admin, text="Create Account", bg='#b80000', fg='#ffffff',
-                                              relief='flat', command=submit_new_admin)
-            self.button_new_admin.grid(row=5, column=0, sticky='ew')
+    def _create_table(self):
+        table_columns = ("ID", "Name", "Email", "Contact Number", "Plate Number", "Vehicle Type", "Reservation Date", "Reservation Time")
 
-        def new_car_owner_ui():
-            self.frame_owner = tk.Frame(self.page_accounts, bg='#e6e6e6', relief='raised', width=300)
-            self.frame_owner.grid(row=0, column=1)
+        self.reservation_table = ttk.Treeview(self.reservation_manager, columns=table_columns, show="headings", style="Custom.Treeview", selectmode="browse")
 
-            self.label_owner_name = tk.Label(self.frame_owner, text="Name", bg='#e6e6e6')
-            self.label_owner_name.grid(row=0, column=0)
+        for col in table_columns:
+            self.reservation_table.heading(col, text=col, anchor="w")
 
-            self.entry_owner_name = tk.Entry(self.frame_owner, bg='#e6e6e6')
-            self.entry_owner_name.grid(row=0, column=1)
+            if col == "ID":
+                self.reservation_table.column(col, width=40, minwidth=40)
+            elif col in ("Name", "Email"):
+                self.reservation_table.column(col, width=150, minwidth=100)
+            elif col in ("Plate Number", "Vehicle Type"):
+                self.reservation_table.column(col, width=100, minwidth=60)
+            else:
+                self.reservation_table.column(col, width=120, minwidth=80)
 
-            self.label_owner_type = tk.Label(self.frame_owner, text="Type", bg='#e6e6e6')
-            self.label_owner_type.grid(row=1, column=0)
+        v_scrollbar = ttk.Scrollbar(self.reservation_manager, orient="vertical",
+                                    command=self.reservation_table.yview)
+        h_scrollbar = ttk.Scrollbar(self.reservation_manager, orient="horizontal",
+                                    command=self.reservation_table.xview)
 
-            self.entry_owner_type = tk.Entry(self.frame_owner, bg='#e6e6e6')
-            self.entry_owner_type.grid(row=1, column=1)
+        self.reservation_table.configure(yscrollcommand=v_scrollbar.set,
+                                         xscrollcommand=h_scrollbar.set)
 
-            self.label_owner_email = tk.Label(self.frame_owner, text="Email", bg='#e6e6e6')
-            self.label_owner_email.grid(row=2, column=0)
+        self.reservation_table.tag_configure('pending', background="#fe9705", foreground="white")
+        self.reservation_table.tag_configure('approved', background="#3ac430", foreground="white")
+        self.reservation_table.tag_configure('rejected', background="#a9a9a9", foreground="gray")
 
-            self.entry_owner_email = tk.Entry(self.frame_owner, bg='#e6e6e6')
-            self.entry_owner_email.grid(row=2, column=1)
+        self.reservation_table.bind("<<TreeviewSelect>>", self.on_table_selection)
 
-            self.label_owner_number = tk.Label(self.frame_owner, text="Contact Number", bg='#e6e6e6')
-            self.label_owner_number.grid(row=3, column=0)
+        self.reservation_table.grid(column=0, row=1, columnspan=2, sticky="nsew")
+        v_scrollbar.grid(column=2, row=1, sticky="ns")
+        h_scrollbar.grid(column=0, row=2, columnspan=2, sticky="ew")
 
-            self.entry_owner_number = tk.Entry(self.frame_owner, bg='#e6e6e6')
-            self.entry_owner_number.grid(row=3, column=1)
+    def on_table_selection(self, event):
+        selection = self.reservation_table.selection()
 
-            def submit_owner():
-                try:
-                    owner_name = self.entry_owner_name.get()
-                    owner_type = self.entry_owner_type.get()
-                    email_address = self.entry_owner_email.get()
-                    contact_number = self.entry_owner_number.get()
+        if not selection:
+            return
 
-                    if not all([owner_name, owner_type, email_address, contact_number]):
-                        raise Exception(messagebox.showerror("Error", "Please enter all fields"))
+        values = self.reservation_table.item(selection[0], 'values')
 
-                    if not is_valid_email(email_address):
-                        raise Exception(messagebox.showerror("Error", "Invalid email address!"))
+        for i, results in enumerate(self.details.values(), start=1):
+            results.set(values[i])
 
-                    if new_car_owner(owner_name, email_address, owner_type, contact_number,
-                                     refresh_callback=load_owner_data):
-                        messagebox.showinfo("Info", "Successfully added" + owner_name)
+    def fetch_reservations(self):
+        try:
+            self.reservation_table.delete(*self.reservation_table.get_children())
 
-                        self.entry_owner_name.delete(0, tk.END)
-                        self.entry_owner_type.delete(0, tk.END)
-                        self.entry_owner_email.delete(0, tk.END)
-                        self.entry_owner_number.delete(0, tk.END)
-                except Exception as e:
-                    print(f"Error: {e}")
+            reservations_data = get_reservations()
 
-            self.add_button = tk.Button(self.frame_owner, text="Submit", bg='#b80000', fg='#ffffff', relief='flat',
-                                        command=submit_owner)
-            self.add_button.grid(row=4, column=1, sticky='ew')
+            for i, reservations in enumerate(reservations_data):
+                if reservations[8] == "PENDING":
+                    tag = "pending"
+                elif reservations[8] == "APPROVED":
+                    tag = "approved"
+                else:
+                    tag = "rejected"
 
-        new_car_owner_ui()
-        new_admin_ui()
-        test_tree_ui()
+                self.reservation_table.insert("", "end", values=reservations, tags=(tag,))
+        except Exception as e:
+            print(f"Error fetching reservations: {e}")
 
+class VehiclesPage(tk.Frame):
+    def __init__(self, master):
+        super().__init__(master, bg="#e6e6e6", padx=10, pady=10)
+
+        self._test_label()
+
+    def _test_label(self):
+        tk.Label(self, text="This is a test!", bg='#e6e6e6', fg="black", font=("Arial", 24, "bold")).pack(expand=True, fill='both')
 
 def is_valid_email(email):
     pattern = r'^[\w\.-]+@[\w\.-]+\.\w+$'
