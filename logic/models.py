@@ -1,4 +1,3 @@
-
 from db.database import get_connection
 from datetime import datetime, timezone, timedelta
 
@@ -274,6 +273,10 @@ def check_registration(plate_number):
     try:
         cursor.execute("SELECT expiration_date FROM registered_cars WHERE plate_number = ?", (plate_number,))
         dates = cursor.fetchone()
+
+        if not dates:
+            return True
+
         expiration_date = datetime.strptime(dates[0], "%m/%d/%Y")
 
         if ph_time > expiration_date.replace(tzinfo=ph_offset):
