@@ -602,7 +602,7 @@ class HomePage(tk.Frame):
             if not all([slot_number, vehicle_type, owner_name, plate_number, status_type, contact_number]):
                 raise Exception("Please enter all required fields!",
                                 messagebox.showerror("Error", "Please enter all required fields!"))
-            
+
             if not is_valid_plate_number(plate_number):
                 raise Exception("Invalid plate number!", messagebox.showerror("Error", "Invalid Plate Number"))
 
@@ -611,9 +611,6 @@ class HomePage(tk.Frame):
 
             if not slot_number in self.slot_numbers:
                 raise Exception(messagebox.showerror("Error", "Slot number must be in parking slots!"))
-
-            if not check_registration(plate_number):
-                raise Exception(messagebox.showerror("Error", "Vehicle Pass is Expired!"))
 
             if park_vehicle(slot_number, vehicle_type, owner_name, plate_number, status_type,
                             contact_number):
@@ -660,6 +657,7 @@ class ReservationsPage(tk.Frame):
         self._initialize_action_widgets()
         self._initialize_buttons()
         self._create_table()
+        self.create_buttons()
         self.fetch_reservations()
 
     def _initialize_inner_frames(self):
@@ -801,6 +799,11 @@ class ReservationsPage(tk.Frame):
 
         for i, results in enumerate(self.details.values(), start=1):
             results.set(values[i])
+
+    def create_buttons(self):
+        refresh_button = tk.Button(self.reservations_actions, text="Refresh", bg="#ffcc00", fg="black", relief="flat", command=self.fetch_reservations)
+
+        refresh_button.grid(row=2, column=1, sticky="nsew")
 
     def fetch_reservations(self):
         try:
