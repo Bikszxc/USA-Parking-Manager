@@ -2,38 +2,942 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Reservation Form</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>University Of San Agustin - Parking Reservation</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --usa-red: #b80000;
+            --usa-yellow: #ffcc00;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, var(--usa-red) 0%, #8b0000 50%, #4a0000 100%);
+            min-height: 100vh;
+        }
+
+        .step {
+            display: none;
+            opacity: 0;
+            transform: translateX(50px);
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .step.active {
+            display: block;
+            opacity: 1;
+            transform: translateX(0);
+            animation: slideIn 0.4s ease-out;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .form-input {
+            background: rgba(255, 255, 255, 0.95);
+            border: 3px solid transparent;
+            transition: all 0.3s ease;
+            font-size: 1.125rem;
+            font-weight: 500;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: var(--usa-yellow);
+            background: white;
+            box-shadow: 0 0 0 4px rgba(255, 204, 0, 0.1);
+            transform: scale(1.02);
+        }
+
+        .form-input:hover {
+            background: white;
+            transform: translateY(-1px);
+        }
+
+        .btn-primary {
+            background: var(--usa-red);
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .btn-primary:hover {
+            background: #8b0000;
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(184, 0, 0, 0.3);
+        }
+
+        .btn-primary:active {
+            transform: scale(0.98);
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.2);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            transition: all 0.3s ease;
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.3);
+            border-color: var(--usa-yellow);
+        }
+
+        .progress-bar {
+            height: 6px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--usa-yellow), #ffd700);
+            border-radius: 3px;
+            transition: width 0.5s ease;
+            box-shadow: 0 0 10px rgba(255, 204, 0, 0.5);
+        }
+
+        .vehicle-card {
+            background: rgba(255, 255, 255, 0.95);
+            border: 3px solid transparent;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+
+        .vehicle-card:hover {
+            background: white;
+            transform: translateY(-3px);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+        }
+
+        .vehicle-card.selected {
+            border-color: var(--usa-yellow);
+            background: var(--usa-yellow);
+            color: var(--usa-red);
+            transform: scale(1.05);
+        }
+
+        .vehicle-card.selected .vehicle-icon {
+            color: var(--usa-red);
+        }
+
+        .custom-datepicker {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 1rem;
+            padding: 1.5rem;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+        }
+
+        .date-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 0.5rem;
+        }
+
+        .date-cell {
+            aspect-ratio: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-weight: 500;
+        }
+
+        .date-cell:hover {
+            background: var(--usa-yellow);
+            color: var(--usa-red);
+        }
+
+        .date-cell.selected {
+            background: var(--usa-red);
+            color: white;
+        }
+
+        .date-cell.disabled {
+            color: #ccc;
+            cursor: not-allowed;
+        }
+
+        .time-slot {
+            background: rgba(255, 255, 255, 0.9);
+            border: 2px solid transparent;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+
+        .time-slot:hover {
+            background: white;
+            border-color: var(--usa-yellow);
+            transform: translateY(-2px);
+        }
+
+        .time-slot.selected {
+            background: var(--usa-yellow);
+            border-color: var(--usa-red);
+            color: var(--usa-red);
+        }
+
+        .question-number {
+            background: var(--usa-yellow);
+            color: var(--usa-red);
+            font-weight: bold;
+            min-width: 2rem;
+            height: 2rem;
+            border-radius: 1rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .success-animation {
+            animation: successPulse 2s infinite;
+        }
+
+        @keyframes successPulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 1rem;
+                margin: 0;
+            }
+
+            .question-title {
+                font-size: 1.5rem;
+            }
+
+            .vehicle-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .time-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @media (orientation: landscape) and (max-height: 600px) {
+            .container {
+                padding: 0.5rem;
+            }
+
+            .question-title {
+                font-size: 1.25rem;
+                margin-bottom: 1rem;
+            }
+        }
+    </style>
 </head>
 <body>
-    <h2>Reservation Form</h2>
+    <div class="min-h-screen flex items-center justify-center p-4">
+        <div class="container w-full max-w-2xl">
+            <!-- Progress Bar -->
+            <div class="progress-bar mb-8" id="pg_bar">
+                <div class="progress-fill" id="progressFill" style="width: 12.5%"></div>
+            </div>
 
-    {% if message %}
-        <p style="color: green;">{{ message }}</p>
-    {% endif %}
+            <!-- Step Counter -->
+            <div class="text-center mb-6">
+                <span class="text-white text-lg" id="pg_count">
+                    <span id="currentStep">1</span> of 9
+                </span>
+            </div>
 
-    <form method="post" action="/submit">
-        <label for="name">Name:</label><br>
-        <input type="text" id="name" name="name" required><br><br>
+            <!-- Success Message -->
+            <div class="step {% if message %}active{% endif %}" id="step-success">
+                <div class="text-center">
+                    <div class="success-animation bg-green-500 rounded-full w-24 h-24 flex items-center justify-center mx-auto mb-6">
+                        <i class="fas fa-check text-white text-4xl"></i>
+                    </div>
+                    <h2 class="text-3xl font-bold text-white mb-4">Reservation Confirmed!</h2>
+                    <p class="text-xl text-green-300 mb-8">{{ message }}</p>
+                    <button onclick="resetForm()" class="btn-primary text-white font-bold py-4 px-8 rounded-xl">
+                        Make Another Reservation
+                    </button>
+                </div>
+            </div>
 
-        <label for="email">Email Address:</label><br>
-        <input type="email" id="email" name="email" required><br><br>
+            <form method="post" action="/submit" id="typeformReservation">
+                <!-- Step 1: Welcome -->
+                <div class="step {% if not message %}active{% endif %}" id="step-1">
+                    <div class="text-center">
+                        <div class="mb-8">
+                            <i class="fas fa-car text-6xl mb-4" style="color: var(--usa-yellow)"></i>
+                            <h1 class="text-4xl md:text-5xl font-bold text-white mb-4">
+                                University Of San Agustin
+                            </h1>
+                            <p class="text-xl text-gray-200 mb-8">
+                                Let's reserve your parking spot in just a few steps
+                            </p>
+                        </div>
 
-        <label for="contact">Contact Number:</label><br>
-        <input type="text" id="contact" name="contact_number" required><br><br>
+                        <button type="button" onclick="nextStep()" class="btn-primary text-white font-bold py-4 px-8 rounded-xl text-lg">
+                            <i class="fas fa-arrow-right mr-2"></i>
+                            Start Reservation
+                        </button>
+                    </div>
+                </div>
 
-        <label for="plate">Plate Number:</label><br>
-        <input type="text" id="plate" name="plate_number" required><br><br>
+                <!-- Step 2: Name -->
+                <div class="step" id="step-2">
+                    <div class="mb-8">
+                        <div class="flex items-center mb-6">
+                            <div class="question-number mr-4">1</div>
+                            <h2 class="question-title text-2xl md:text-3xl font-bold text-white">
+                                What's your full name?
+                            </h2>
+                        </div>
 
-        <label for="vehicle">Vehicle Type:</label><br>
-        <input type="text" id="vehicle" name="vehicle_type" required><br><br>
+                        <input type="text" id="name" name="name" required
+                               class="form-input w-full px-6 py-4 rounded-xl text-gray-800 text-xl"
+                               placeholder="Enter your full name"
+                               onkeypress="handleEnter(event, 3)">
+                    </div>
 
-        <label for="date">Reservation Date:</label><br>
-        <input type="date" id="date" name="reservation_date" required><br><br>
+                    <div class="flex justify-between">
+                        <button type="button" onclick="prevStep()" class="btn-secondary py-3 px-6 rounded-xl">
+                            <i class="fas fa-arrow-left mr-2"></i>Back
+                        </button>
+                        <button type="button" onclick="nextStep()" class="btn-primary text-white py-3 px-6 rounded-xl" disabled id="btn-step-2">
+                            Next<i class="fas fa-arrow-right ml-2"></i>
+                        </button>
+                    </div>
+                </div>
 
-        <label for="time">Reservation Time:</label><br>
-        <input type="time" id="time" name="reservation_time" required><br><br>
+                <!-- Step 3: Email -->
+                <div class="step" id="step-3">
+                    <div class="mb-8">
+                        <div class="flex items-center mb-6">
+                            <div class="question-number mr-4">2</div>
+                            <h2 class="question-title text-2xl md:text-3xl font-bold text-white">
+                                What's your email address?
+                            </h2>
+                        </div>
 
-        <button type="submit">Submit</button>
-    </form>
+                        <input type="email" id="email" name="email" required
+                               class="form-input w-full px-6 py-4 rounded-xl text-gray-800 text-xl"
+                               placeholder="your.email@example.com"
+                               onkeypress="handleEnter(event, 4)">
+                    </div>
+
+                    <div class="flex justify-between">
+                        <button type="button" onclick="prevStep()" class="btn-secondary py-3 px-6 rounded-xl">
+                            <i class="fas fa-arrow-left mr-2"></i>Back
+                        </button>
+                        <button type="button" onclick="nextStep()" class="btn-primary text-white py-3 px-6 rounded-xl" disabled id="btn-step-3">
+                            Next<i class="fas fa-arrow-right ml-2"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Step 4: Contact -->
+                <div class="step" id="step-4">
+                    <div class="mb-8">
+                        <div class="flex items-center mb-6">
+                            <div class="question-number mr-4">3</div>
+                            <h2 class="question-title text-2xl md:text-3xl font-bold text-white">
+                                What's your contact number?
+                            </h2>
+                        </div>
+
+                        <input type="tel" id="contact" name="contact_number_formatted" required
+                               class="form-input w-full px-6 py-4 rounded-xl text-gray-800 text-xl"
+                               placeholder="09XX-XXX-XXXX"
+                               onkeypress="handleEnter(event, 5)">
+                        <input type="hidden" id="contactHidden" name="contact_number">
+                    </div>
+
+                    <div class="flex justify-between">
+                        <button type="button" onclick="prevStep()" class="btn-secondary py-3 px-6 rounded-xl">
+                            <i class="fas fa-arrow-left mr-2"></i>Back
+                        </button>
+                        <button type="button" onclick="nextStep()" class="btn-primary text-white py-3 px-6 rounded-xl" disabled id="btn-step-4">
+                            Next<i class="fas fa-arrow-right ml-2"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Step 5: Plate Number -->
+                <div class="step" id="step-5">
+                    <div class="mb-8">
+                        <div class="flex items-center mb-6">
+                            <div class="question-number mr-4">4</div>
+                            <h2 class="question-title text-2xl md:text-3xl font-bold text-white">
+                                What's your vehicle's plate number?
+                            </h2>
+                        </div>
+
+                        <input type="text" id="plate" name="plate_number" required
+                               class="form-input w-full px-6 py-4 rounded-xl text-gray-800 text-xl uppercase text-center tracking-wider"
+                               placeholder="ABC-1234"
+                               onkeypress="handleEnter(event, 6)">
+                    </div>
+
+                    <div class="flex justify-between">
+                        <button type="button" onclick="prevStep()" class="btn-secondary py-3 px-6 rounded-xl">
+                            <i class="fas fa-arrow-left mr-2"></i>Back
+                        </button>
+                        <button type="button" onclick="nextStep()" class="btn-primary text-white py-3 px-6 rounded-xl" disabled id="btn-step-5">
+                            Next<i class="fas fa-arrow-right ml-2"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Step 6: Vehicle Type -->
+                <div class="step" id="step-6">
+                    <div class="mb-8">
+                        <div class="flex items-center mb-6">
+                            <div class="question-number mr-4">5</div>
+                            <h2 class="question-title text-2xl md:text-3xl font-bold text-white">
+                                What type of vehicle do you have?
+                            </h2>
+                        </div>
+
+                        <input type="text" id="vehicle" name="vehicle_type" required
+                               class="form-input w-full px-6 py-4 rounded-xl text-gray-800 text-xl text-center tracking-wider mb-6"
+                               placeholder="Enter if not listed"
+                               onkeypress="handleEnter(event, 7)">
+
+                        <div class="vehicle-grid grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                            <div class="vehicle-card p-6 rounded-xl text-center" onclick="selectVehicle('Sedan')">
+                                <i class="vehicle-icon fas fa-car text-4xl text-gray-700 mb-3"></i>
+                                <p class="font-bold text-gray-800">Sedan</p>
+                            </div>
+                            <div class="vehicle-card p-6 rounded-xl text-center" onclick="selectVehicle('SUV')">
+                                <i class="vehicle-icon fas fa-car-side text-4xl text-gray-700 mb-3"></i>
+                                <p class="font-bold text-gray-800">SUV</p>
+                            </div>
+                            <div class="vehicle-card p-6 rounded-xl text-center" onclick="selectVehicle('Motorcycle')">
+                                <i class="vehicle-icon fas fa-motorcycle text-4xl text-gray-700 mb-3"></i>
+                                <p class="font-bold text-gray-800">Motorcycle</p>
+                            </div>
+                            <div class="vehicle-card p-6 rounded-xl text-center" onclick="selectVehicle('Pickup')">
+                                <i class="vehicle-icon fas fa-truck-pickup text-4xl text-gray-700 mb-3"></i>
+                                <p class="font-bold text-gray-800">Pickup</p>
+                            </div>
+                        </div>
+
+<!--                        <input type="hidden" id="vehicle" name="vehicle_type" required>-->
+                    </div>
+
+                    <div class="flex justify-between">
+                        <button type="button" onclick="prevStep()" class="btn-secondary py-3 px-6 rounded-xl">
+                            <i class="fas fa-arrow-left mr-2"></i>Back
+                        </button>
+                        <button type="button" onclick="nextStep()" class="btn-primary text-white py-3 px-6 rounded-xl" disabled id="btn-step-6">
+                            Next<i class="fas fa-arrow-right ml-2"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Step 7: Date Selection -->
+                <div class="step" id="step-7">
+                    <div class="mb-8">
+                        <div class="flex items-center mb-6">
+                            <div class="question-number mr-4">6</div>
+                            <h2 class="question-title text-2xl md:text-3xl font-bold text-white">
+                                When do you need parking?
+                            </h2>
+                        </div>
+
+                        <div class="custom-datepicker">
+                            <div class="flex justify-between items-center mb-4">
+                                <button type="button" onclick="changeMonth(-1)" class="text-2xl text-gray-600 hover:text-usa-red">
+                                    <i class="fas fa-chevron-left"></i>
+                                </button>
+                                <h3 id="monthYear" class="text-xl font-bold text-gray-800"></h3>
+                                <button type="button" onclick="changeMonth(1)" class="text-2xl text-gray-600 hover:text-usa-red">
+                                    <i class="fas fa-chevron-right"></i>
+                                </button>
+                            </div>
+
+                            <div class="date-grid mb-4">
+                                <div class="text-center font-semibold text-gray-600 py-2">Sun</div>
+                                <div class="text-center font-semibold text-gray-600 py-2">Mon</div>
+                                <div class="text-center font-semibold text-gray-600 py-2">Tue</div>
+                                <div class="text-center font-semibold text-gray-600 py-2">Wed</div>
+                                <div class="text-center font-semibold text-gray-600 py-2">Thu</div>
+                                <div class="text-center font-semibold text-gray-600 py-2">Fri</div>
+                                <div class="text-center font-semibold text-gray-600 py-2">Sat</div>
+                            </div>
+
+                            <div id="dateGrid" class="date-grid"></div>
+                        </div>
+
+                        <input type="hidden" id="reservationDate" name="reservation_date" required>
+                    </div>
+
+                    <div class="flex justify-between">
+                        <button type="button" onclick="prevStep()" class="btn-secondary py-3 px-6 rounded-xl">
+                            <i class="fas fa-arrow-left mr-2"></i>Back
+                        </button>
+                        <button type="button" onclick="nextStep()" class="btn-primary text-white py-3 px-6 rounded-xl" disabled id="btn-step-7">
+                            Next<i class="fas fa-arrow-right ml-2"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Step 8: Time Selection -->
+                <div class="step" id="step-8">
+                    <div class="mb-8">
+                        <div class="flex items-center mb-6">
+                            <div class="question-number mr-4">7</div>
+                            <h2 class="question-title text-2xl md:text-3xl font-bold text-white">
+                                What time do you need it?
+                            </h2>
+                        </div>
+
+                        <div class="time-grid grid grid-cols-2 md:grid-cols-3 gap-4">
+                            <div class="time-slot p-4 rounded-xl text-center font-semibold" onclick="selectTime('08:00')">
+                                <i class="fas fa-sun text-2xl mb-2 text-yellow-500"></i>
+                                <p>8:00 AM</p>
+                            </div>
+                            <div class="time-slot p-4 rounded-xl text-center font-semibold" onclick="selectTime('09:00')">
+                                <i class="fas fa-sun text-2xl mb-2 text-yellow-500"></i>
+                                <p>9:00 AM</p>
+                            </div>
+                            <div class="time-slot p-4 rounded-xl text-center font-semibold" onclick="selectTime('10:00')">
+                                <i class="fas fa-sun text-2xl mb-2 text-yellow-500"></i>
+                                <p>10:00 AM</p>
+                            </div>
+                            <div class="time-slot p-4 rounded-xl text-center font-semibold" onclick="selectTime('11:00')">
+                                <i class="fas fa-sun text-2xl mb-2 text-yellow-500"></i>
+                                <p>11:00 AM</p>
+                            </div>
+                            <div class="time-slot p-4 rounded-xl text-center font-semibold" onclick="selectTime('12:00')">
+                                <i class="fas fa-sun text-2xl mb-2 text-orange-500"></i>
+                                <p>12:00 PM</p>
+                            </div>
+                            <div class="time-slot p-4 rounded-xl text-center font-semibold" onclick="selectTime('13:00')">
+                                <i class="fas fa-sun text-2xl mb-2 text-orange-500"></i>
+                                <p>1:00 PM</p>
+                            </div>
+                            <div class="time-slot p-4 rounded-xl text-center font-semibold" onclick="selectTime('14:00')">
+                                <i class="fas fa-sun text-2xl mb-2 text-orange-500"></i>
+                                <p>2:00 PM</p>
+                            </div>
+                            <div class="time-slot p-4 rounded-xl text-center font-semibold" onclick="selectTime('15:00')">
+                                <i class="fas fa-sun text-2xl mb-2 text-orange-500"></i>
+                                <p>3:00 PM</p>
+                            </div>
+                            <div class="time-slot p-4 rounded-xl text-center font-semibold" onclick="selectTime('16:00')">
+                                <i class="fas fa-sun text-2xl mb-2 text-orange-500"></i>
+                                <p>4:00 PM</p>
+                            </div>
+                            <div class="time-slot p-4 rounded-xl text-center font-semibold" onclick="selectTime('17:00')">
+                                <i class="fas fa-moon text-2xl mb-2 text-blue-500"></i>
+                                <p>5:00 PM</p>
+                            </div>
+                        </div>
+
+                        <input type="hidden" id="reservationTime" name="reservation_time" required>
+                    </div>
+
+                    <div class="flex justify-between">
+                        <button type="button" onclick="prevStep()" class="btn-secondary py-3 px-6 rounded-xl">
+                            <i class="fas fa-arrow-left mr-2"></i>Back
+                        </button>
+                        <button type="button" onclick="nextStep()" class="btn-primary text-white py-3 px-6 rounded-xl" disabled id="btn-step-8">
+                            Review<i class="fas fa-arrow-right ml-2"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Step 9: Review -->
+                <div class="step" id="step-9">
+                    <div class="mb-8">
+                        <div class="flex items-center mb-6">
+                            <div class="question-number mr-4">8</div>
+                            <h2 class="question-title text-2xl md:text-3xl font-bold text-white">
+                                Review your reservation
+                            </h2>
+                        </div>
+
+                        <div class="bg-white bg-opacity-95 rounded-xl p-6 space-y-4">
+                            <div class="flex justify-between items-center border-b pb-2">
+                                <span class="font-semibold text-gray-600">Name:</span>
+                                <span id="reviewName" class="text-gray-800 font-bold"></span>
+                            </div>
+                            <div class="flex justify-between items-center border-b pb-2">
+                                <span class="font-semibold text-gray-600">Email:</span>
+                                <span id="reviewEmail" class="text-gray-800"></span>
+                            </div>
+                            <div class="flex justify-between items-center border-b pb-2">
+                                <span class="font-semibold text-gray-600">Contact:</span>
+                                <span id="reviewContact" class="text-gray-800"></span>
+                            </div>
+                            <div class="flex justify-between items-center border-b pb-2">
+                                <span class="font-semibold text-gray-600">Plate Number:</span>
+                                <span id="reviewPlate" class="text-gray-800 font-mono font-bold"></span>
+                            </div>
+                            <div class="flex justify-between items-center border-b pb-2">
+                                <span class="font-semibold text-gray-600">Vehicle Type:</span>
+                                <span id="reviewVehicle" class="text-gray-800"></span>
+                            </div>
+                            <div class="flex justify-between items-center border-b pb-2">
+                                <span class="font-semibold text-gray-600">Date:</span>
+                                <span id="reviewDate" class="text-gray-800 font-bold"></span>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span class="font-semibold text-gray-600">Time:</span>
+                                <span id="reviewTime" class="text-gray-800 font-bold"></span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="flex justify-between">
+                        <button type="button" onclick="prevStep()" class="btn-secondary py-3 px-6 rounded-xl">
+                            <i class="fas fa-arrow-left mr-2"></i>Back
+                        </button>
+                        <button type="submit" class="btn-primary text-white py-4 px-8 rounded-xl text-lg font-bold">
+                            <i class="fas fa-check mr-2"></i>
+                            Confirm Reservation
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        let currentStepNum = 1;
+        let totalSteps = 9;
+        let currentMonth = new Date().getMonth();
+        let currentYear = new Date().getFullYear();
+        let selectedDate = null;
+        let selectedTime = null;
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            updateCalendar();
+            setupInputValidation();
+        });
+
+        function nextStep() {
+            if (currentStepNum < totalSteps) {
+                if (validateCurrentStep()) {
+                    const currentStep = document.getElementById(`step-${currentStepNum}`);
+                    console.log(currentStep);
+                    currentStepNum++;
+                    const nextStep = document.getElementById(`step-${currentStepNum}`);
+
+                    currentStep.classList.remove('active');
+                    setTimeout(() => {
+                        nextStep.classList.add('active');
+                        updateProgress();
+                        updateStepCounter();
+
+                        if (currentStepNum === 9) {
+                            updateReview();
+                        }
+                    }, 200);
+                }
+            }
+        }
+
+        function prevStep() {
+            if (currentStepNum > 1) {
+                const currentStep = document.getElementById(`step-${currentStepNum}`);
+                currentStepNum--;
+                const prevStep = document.getElementById(`step-${currentStepNum}`);
+
+                currentStep.classList.remove('active');
+                setTimeout(() => {
+                    prevStep.classList.add('active');
+                    updateProgress();
+                    updateStepCounter();
+                }, 200);
+            }
+        }
+
+        function updateProgress() {
+            const progress = (currentStepNum / totalSteps) * 100;
+            document.getElementById('progressFill').style.width = progress + '%';
+        }
+
+        function updateStepCounter() {
+            document.getElementById('currentStep').textContent = currentStepNum;
+        }
+
+        function validateCurrentStep() {
+            switch(currentStepNum) {
+                case 2:
+                    return document.getElementById('name').value.trim() !== '';
+                case 3:
+                    return document.getElementById('email').value.trim() !== '' &&
+                           document.getElementById('email').validity.valid;
+                case 4:
+                    return document.getElementById('contact').value.trim() !== '';
+                case 5:
+                    return document.getElementById('plate').value.trim() !== '';
+                case 6:
+                    return document.getElementById('vehicle').value !== '';
+                case 7:
+                    return selectedDate !== null;
+                case 8:
+                    return selectedTime !== null;
+                default:
+                    return true;
+            }
+        }
+
+        function setupInputValidation() {
+            // Name validation
+            document.getElementById('name').addEventListener('input', function() {
+                const btn = document.getElementById('btn-step-2');
+                btn.disabled = this.value.trim() === '';
+            });
+
+            // Email validation
+            document.getElementById('email').addEventListener('input', function() {
+                const btn = document.getElementById('btn-step-3');
+                btn.disabled = this.value.trim() === '' || !this.validity.valid;
+            });
+
+            // Contact formatting and validation
+            const contactInput = document.getElementById('contact');
+            contactInput.addEventListener('input', function() {
+                let value = this.value.replace(/\D/g, '');
+
+                if (value.length >= 7) {
+                    value = value.substring(0, 4) + '-' + value.substring(4, 7) + '-' + value.substring(7, 11);
+                } else if (value.length >= 4) {
+                    value = value.substring(0, 4) + '-' + value.substring(4);
+                }
+
+                this.value = value;
+
+                // Update hidden field with clean number
+                const cleanNumber = this.value.replace(/\D/g, '');
+                document.getElementById('contactHidden').value = cleanNumber;
+
+                const btn = document.getElementById('btn-step-4');
+                btn.disabled = cleanNumber.length < 11;
+            });
+
+            // Plate number validation
+            document.getElementById('plate').addEventListener('input', function() {
+                let value = this.value.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+                let formatted = '';
+
+                if (value.length > 0) {
+                    let letters = value.substring(0, 3).replace(/[0-9]/g, '');
+                    formatted += letters;
+                }
+
+                if (value.length > 3) {
+                    if (formatted.length === 3) {
+                        formatted += ' ';
+                    }
+
+                    let numbers = value.substring(3).replace(/[A-Z]/g, '');
+                    formatted += numbers.substring(0, 4);
+                }
+
+                this.value = formatted;
+
+                const isValid = /^[A-Z]{3} [0-9]{4}$/.test(formatted);
+                const btn = document.getElementById('btn-step-5');
+                btn.disabled = !isValid;
+            });
+
+            document.getElementById('vehicle').addEventListener('focus', function() {
+                const cards = document.querySelectorAll('.vehicle-card');
+
+                cards.forEach(card => {
+                    if (card.classList.contains('selected')) {
+                        this.value = '';
+                        card.classList.remove('selected');
+                    }
+                })
+            });
+
+            document.getElementById('vehicle').addEventListener('input', function() {
+                let value = this.value.trim().toLowerCase()
+
+                const cards = document.querySelectorAll('.vehicle-card');
+
+                cards.forEach(card => {
+                    card.classList.remove('selected');
+
+                    const cardText = card.querySelector('p').textContent;
+
+                    if (value && value === cardText.toLowerCase()) {
+                        card.classList.add('selected');
+                    }
+
+                    if (value && value === cardText.toLowerCase()) {
+                        this.value = '' + cardText;
+                    }
+                })
+            });
+        }
+
+        function handleEnter(event, nextStepNum) {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                if (validateCurrentStep()) {
+                    nextStep();
+                }
+            }
+        }
+
+        function selectVehicle(type) {
+            const cards = document.querySelectorAll('.vehicle-card');
+            cards.forEach(card => card.classList.remove('selected'));
+
+            event.currentTarget.classList.add('selected');
+            document.getElementById('vehicle').value = type;
+
+            const btn = document.getElementById('btn-step-6');
+            btn.disabled = false;
+        }
+
+        // Calendar Functions
+        function updateCalendar() {
+            const monthNames = ["January", "February", "March", "April", "May", "June",
+                "July", "August", "September", "October", "November", "December"];
+
+            document.getElementById('monthYear').textContent = `${monthNames[currentMonth]} ${currentYear}`;
+
+            const dateGrid = document.getElementById('dateGrid');
+            dateGrid.innerHTML = '';
+
+            const firstDay = new Date(currentYear, currentMonth, 1).getDay();
+            const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+            const today = new Date();
+
+            // Add empty cells for days before the first day of the month
+            for (let i = 0; i < firstDay; i++) {
+                const emptyCell = document.createElement('div');
+                dateGrid.appendChild(emptyCell);
+            }
+
+            // Add days of the month
+            for (let day = 1; day <= daysInMonth; day++) {
+                const dateCell = document.createElement('div');
+                dateCell.className = 'date-cell';
+                dateCell.textContent = day;
+
+                const cellDate = new Date(currentYear, currentMonth, day);
+
+                if (cellDate < today.setHours(0,0,0,0)) {
+                    dateCell.classList.add('disabled');
+                } else {
+                    dateCell.addEventListener('click', () => selectDate(day));
+                }
+
+                dateGrid.appendChild(dateCell);
+            }
+        }
+
+        function changeMonth(direction) {
+            currentMonth += direction;
+            if (currentMonth < 0) {
+                currentMonth = 11;
+                currentYear--;
+            } else if (currentMonth > 11) {
+                currentMonth = 0;
+                currentYear++;
+            }
+            updateCalendar();
+        }
+
+        function selectDate(day) {
+            const dateCells = document.querySelectorAll('.date-cell');
+            dateCells.forEach(cell => cell.classList.remove('selected'));
+
+            event.currentTarget.classList.add('selected');
+
+            selectedDate = new Date(currentYear, currentMonth, day);
+            const formattedDate = selectedDate.toISOString().split('T')[0];
+            document.getElementById('reservationDate').value = formattedDate;
+
+            const btn = document.getElementById('btn-step-7');
+            btn.disabled = false;
+        }
+
+        function selectTime(time) {
+            const timeSlots = document.querySelectorAll('.time-slot');
+            timeSlots.forEach(slot => slot.classList.remove('selected'));
+
+            event.currentTarget.classList.add('selected');
+            selectedTime = time;
+            document.getElementById('reservationTime').value = time;
+
+            const btn = document.getElementById('btn-step-8');
+            btn.disabled = false;
+        }
+
+        function updateReview() {
+            document.getElementById('reviewName').textContent = document.getElementById('name').value;
+            document.getElementById('reviewEmail').textContent = document.getElementById('email').value;
+            document.getElementById('reviewContact').textContent = document.getElementById('contact').value;
+            document.getElementById('reviewPlate').textContent = document.getElementById('plate').value;
+            document.getElementById('reviewVehicle').textContent = document.getElementById('vehicle').value;
+
+            const dateOptions = { year: 'numeric', month: 'long', day: 'numeric' };
+            document.getElementById('reviewDate').textContent = selectedDate.toLocaleDateString('en-US', dateOptions);
+
+            const timeOptions = { hour: 'numeric', minute: '2-digit', hour12: true };
+            const timeDate = new Date(`2000-01-01T${selectedTime}:00`);
+            document.getElementById('reviewTime').textContent = timeDate.toLocaleTimeString('en-US', timeOptions);
+        }
+
+        function resetForm() {
+            currentStepNum = 1;
+            selectedDate = null;
+            selectedTime = null;
+
+            // Reset all form fields
+            document.getElementById('typeformReservation').reset();
+
+            // Reset all steps
+            const steps = document.querySelectorAll('.step');
+            steps.forEach(step => step.classList.remove('active'));
+            document.getElementById('step-1').classList.add('active');
+
+            // Reset progress
+            updateProgress();
+            updateStepCounter();
+
+            // Reset button states
+            const buttons = document.querySelectorAll('[id^="btn-step-"]');
+            buttons.forEach(btn => btn.disabled = true);
+
+            // Reset selections
+            const cards = document.querySelectorAll('.vehicle-card');
+            cards.forEach(card => card.classList.remove('selected'));
+
+            const timeSlots = document.querySelectorAll('.time-slot');
+            timeSlots.forEach(slot => slot.classList.remove('selected'));
+        }
+
+        // Form submission enhancement
+        document.getElementById('typeformReservation').addEventListener('submit', function(e) {
+            const submitBtn = e.target.querySelector('button[type="submit"]');
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Processing...';
+            submitBtn.disabled = true;
+        });
+
+        // Mobile optimization
+        if (window.innerWidth <= 768) {
+            document.addEventListener('touchstart', function() {}, true);
+        }
+    </script>
 </body>
 </html>
