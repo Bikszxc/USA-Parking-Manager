@@ -801,9 +801,11 @@ class ReservationsPage(tk.Frame):
             results.set(values[i])
 
     def create_buttons(self):
-        refresh_button = tk.Button(self.reservations_actions, text="Refresh", bg="#ffcc00", fg="black", relief="flat", command=self.fetch_reservations)
+        select_slot_button = tk.Button(self.reservations_actions, text="View Grid", bg="#ffcc00", fg="black", relief="flat")
+        select_slot_button.grid(row=1, column=1, sticky="nsew")
 
-        refresh_button.grid(row=2, column=1, sticky="nsew")
+        refresh_button = tk.Button(self.reservations_actions, text="Refresh", bg="#ffcc00", fg="black", relief="flat", command=self.fetch_reservations)
+        refresh_button.grid(row=2, column=0, sticky="nsew")
 
     def fetch_reservations(self):
         try:
