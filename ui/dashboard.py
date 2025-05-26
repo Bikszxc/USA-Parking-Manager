@@ -333,7 +333,7 @@ class HomePage(tk.Frame):
         self.frames = {
             "Park Vehicle": self.frame_park_vehicle,
             "Vehicle Info": self.frame_vehicle_info,
-            "Parking Slots": self.frame_park_slots,
+            "Parking Slots": self.frame_park_slots
         }
 
         self.grid_rowconfigure(0, weight=1)
@@ -345,6 +345,7 @@ class HomePage(tk.Frame):
         self._initialize_frame_titles()
         self._initialize_grid()
         self._initialize_styles()
+        self._create_reservation_info_labels()
         self._create_vehicle_info_labels()
         self._create_park_vehicle_labels()
         self._create_park_vehicle_entries()
@@ -360,6 +361,7 @@ class HomePage(tk.Frame):
         self.frame_park_vehicle = tk.Frame(self, bg='#b80000', padx=10, pady=10)
         self.frame_vehicle_info = tk.Frame(self, bg='#b80000', padx=10, pady=10)
         self.frame_park_slots = tk.Frame(self, bg='#b80000', padx=10, pady=10)
+        self.frame_reservation_info = tk.Frame(self.frame_park_slots, bg='#b80000', padx=10, pady=10)
 
     def _initialize_frame_titles(self):
         for (title, f) in self.frames.items():
@@ -371,6 +373,7 @@ class HomePage(tk.Frame):
         self.frames["Park Vehicle"].grid(row=0, column=0, sticky='new')
         self.frames["Vehicle Info"].grid(row=0, column=2, sticky='new')
         self.frames["Parking Slots"].grid(row=2, column=0, columnspan=3, sticky='nsew')
+        self.frame_reservation_info.grid(row=0, column=1, columnspan=4, sticky='ne')
 
     def _initialize_styles(self):
         combobox_style = ttk.Style()
@@ -378,6 +381,31 @@ class HomePage(tk.Frame):
         combobox_style.configure("CustomCombobox.TCombobox", fieldbackground="#b80000", foreground="#ffffff",
                                  relief="flat", borderwidth=0, highlightcolor="#b80000")
         combobox_style.map("CustomCombobox.TCombobox", selectbackground=[('!disabled', "#e6e6e6")], selectforeground=[('!disabled', "black")])
+
+    def _create_reservation_info_labels(self):
+        self.r_info = {
+            "Reservation Name": tk.StringVar(),
+            "Reservation Date": tk.StringVar(),
+            "Reservation Time": tk.StringVar(),
+        }
+
+        title_col = 0
+        var_col = 1
+
+        for i, (label_text, var) in enumerate(self.r_info.items()):
+
+            tk.Label(self.frame_reservation_info, text=label_text, bg='#b80000', fg="white",
+                     font=self.master.subheader_font, padx=10).grid(row=0, column=title_col, sticky='e')
+            tk.Label(self.frame_reservation_info, textvariable=var, bg='#b80000',fg="white",
+                     font=self.master.login_font, padx=10).grid(row=0, column=var_col, sticky='e')
+
+            title_col += 2
+            var_col += 2
+
+        for var in self.r_info.values():
+            var.set("Test")
+
+        self.frame_park_slots.columnconfigure(2, weight=1)
 
     def _create_vehicle_info_labels(self):
         self.v_info = {
@@ -603,6 +631,9 @@ class HomePage(tk.Frame):
                 raise Exception("Please enter all required fields!",
                                 messagebox.showerror("Error", "Please enter all required fields!"))
 
+            if get_parkslot_info(slot_number)[0] == 1:
+                raise Exception("Slot is occupied!", messagebox.showerror("Error", f"Slot {slot_number} is occupied!"))
+
             if not is_valid_plate_number(plate_number):
                 raise Exception("Invalid plate number!", messagebox.showerror("Error", "Invalid Plate Number"))
 
@@ -812,6 +843,9 @@ class ReservationsPage(tk.Frame):
             self.reservation_table.delete(*self.reservation_table.get_children())
 
             reservations_data = get_reservations()
+
+            if not reservations_data:
+                return
 
             for i, reservations in enumerate(reservations_data):
                 if reservations[8] == "PENDING":
