@@ -86,7 +86,8 @@ def init_db():
         type TEXT,
         contact_number TEXT,
         reservation_id INTEGER,
-        reservation_dt TEXT,
+        reservation_date TEXT,
+        reservation_time TEXT,
         FOREIGN KEY (reservation_id) REFERENCES reservations(id)
         )
     ''')
@@ -118,7 +119,8 @@ def init_db():
         vehicle_type TEXT,
         reservation_date TEXT,
         reservation_time TEXT,
-        status TEXT NOT NULL DEFAULT 'PENDING'
+        status TEXT NOT NULL DEFAULT 'PENDING',
+        assigned_slot TEXT
         )
     ''')
 
