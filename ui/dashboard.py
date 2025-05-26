@@ -257,6 +257,7 @@ class DashboardScreen(tk.Frame):
 
     def show_frame(self, container, *args, **kwargs):
         frame = self.frames[container]
+        frame.refresh_data()
         frame.tkraise()
         frame.event_generate("<<ShowFrame>>")
 
@@ -357,23 +358,32 @@ class HomePage(tk.Frame):
         self._create_slot_buttons()
         self._create_submit_buttons()
 
+    def refresh_data(self):
+        self.fetch_database(None)
+
     def _initialize_inner_frames(self):
         self.frame_park_vehicle = tk.Frame(self, bg='#b80000', padx=10, pady=10)
         self.frame_vehicle_info = tk.Frame(self, bg='#b80000', padx=10, pady=10)
         self.frame_park_slots = tk.Frame(self, bg='#b80000', padx=10, pady=10)
-        self.frame_reservation_info = tk.Frame(self.frame_park_slots, bg='#b80000', padx=10, pady=10)
+        self.frame_reservation_info = tk.Frame(self.frame_park_slots, bg='#b80000')
+
 
     def _initialize_frame_titles(self):
         for (title, f) in self.frames.items():
-            tk.Frame(f, bg='#b80000', height=50).grid(row=0, column=0, sticky='w')
-            tk.Label(f, text=title, bg='#b80000', fg="white",
-                     font=self.master.header_font).place(x=0, y=0)
+            if title == "Parking Slots":
+                tk.Frame(f, bg='#b80000', height=60).grid(row=0, column=0, sticky='w')
+                tk.Label(f, text=title, bg='#b80000', fg="white",
+                         font=self.master.header_font).place(x=0, y=5)
+            else:
+                tk.Frame(f, bg='#b80000', height=50).grid(row=0, column=0, sticky='w')
+                tk.Label(f, text=title, bg='#b80000', fg="white",
+                         font=self.master.header_font).place(x=0, y=0)
 
     def _initialize_grid(self):
         self.frames["Park Vehicle"].grid(row=0, column=0, sticky='new')
         self.frames["Vehicle Info"].grid(row=0, column=2, sticky='new')
         self.frames["Parking Slots"].grid(row=2, column=0, columnspan=3, sticky='nsew')
-        self.frame_reservation_info.grid(row=0, column=1, columnspan=4, sticky='ne')
+        self.frame_reservation_info.grid(row=0, column=2, columnspan=3, sticky='e')
 
     def _initialize_styles(self):
         combobox_style = ttk.Style()
@@ -389,21 +399,21 @@ class HomePage(tk.Frame):
             "Reservation Time": tk.StringVar(),
         }
 
-        title_col = 0
-        var_col = 1
-
         for i, (label_text, var) in enumerate(self.r_info.items()):
 
             tk.Label(self.frame_reservation_info, text=label_text, bg='#b80000', fg="white",
-                     font=self.master.subheader_font, padx=10).grid(row=0, column=title_col, sticky='e')
+                     font=self.master.subheader_font, padx=10).grid(row=0, column=i, sticky='se')
             tk.Label(self.frame_reservation_info, textvariable=var, bg='#b80000',fg="white",
-                     font=self.master.login_font, padx=10).grid(row=0, column=var_col, sticky='e')
+                     font=self.master.login_font, padx=10).grid(row=1, column=i, sticky='ne')
 
-            title_col += 2
-            var_col += 2
+
+        self.btn_reservation_view_more = tk.Button(self.frame_reservation_info, bg='#ffcc00', fg="black",
+                                              text="View More Details", font=self.master.subheader_font, relief="flat",
+                                              padx=5, command=lambda: None)
+        self.btn_reservation_view_more.grid(row=0, column=8, rowspan=2, sticky='nsew')
 
         for var in self.r_info.values():
-            var.set("Test")
+            var.set("None")
 
         self.frame_park_slots.columnconfigure(2, weight=1)
 
@@ -575,6 +585,11 @@ class HomePage(tk.Frame):
 
     def get_slot_info(self, slot_number):
 
+        for text in self.r_info:
+            self.r_info[text].set("None")
+
+        self.btn_reservation_view_more.grid_remove()
+
         for res in self.v_info:
             self.v_info[res].set("")
 
@@ -594,6 +609,12 @@ class HomePage(tk.Frame):
                 self.unpark_button.configure(state="disabled")
                 self.dropdown_park_slot.delete(0, "end")
                 self.dropdown_park_slot.insert(0, result[1])
+
+            if result[8]:
+                self.r_info["Reservation Name"].set(result[8])
+                self.r_info["Reservation Date"].set(result[9])
+                self.r_info["Reservation Type"].set(result[10])
+                self.btn_reservation_view_more.grid()
 
     def filter_owner_vehicles(self, event):
         owner_name = self.dropdown_owner.get()
@@ -689,6 +710,9 @@ class ReservationsPage(tk.Frame):
         self._initialize_buttons()
         self._create_table()
         self.create_buttons()
+        self.fetch_reservations()
+
+    def refresh_data(self):
         self.fetch_reservations()
 
     def _initialize_inner_frames(self):
