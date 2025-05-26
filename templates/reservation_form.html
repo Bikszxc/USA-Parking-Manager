@@ -263,8 +263,7 @@
                     <div class="success-animation bg-green-500 rounded-full w-24 h-24 flex items-center justify-center mx-auto mb-6">
                         <i class="fas fa-check text-white text-4xl"></i>
                     </div>
-                    <h2 class="text-3xl font-bold text-white mb-4">Reservation Confirmed!</h2>
-                    <p class="text-xl text-green-300 mb-8">{{ message }}</p>
+                    <h2 class="text-3xl font-bold text-white mb-4">Reservation Submitted!</h2>
                     <button onclick="resetForm()" class="btn-primary text-white font-bold py-4 px-8 rounded-xl">
                         Make Another Reservation
                     </button>
@@ -383,7 +382,7 @@
 
                         <input type="text" id="plate" name="plate_number" required
                                class="form-input w-full px-6 py-4 rounded-xl text-gray-800 text-xl uppercase text-center tracking-wider"
-                               placeholder="ABC-1234"
+                               placeholder="ABC 1234"
                                onkeypress="handleEnter(event, 6)">
                     </div>
 
@@ -504,6 +503,10 @@
                         <div class="time-grid grid grid-cols-2 md:grid-cols-3 gap-4">
                             <div class="time-slot p-4 rounded-xl text-center font-semibold" onclick="selectTime('08:00')">
                                 <i class="fas fa-sun text-2xl mb-2 text-yellow-500"></i>
+                                <p>7:00 AM</p>
+                            </div>
+                            <div class="time-slot p-4 rounded-xl text-center font-semibold" onclick="selectTime('08:00')">
+                                <i class="fas fa-sun text-2xl mb-2 text-yellow-500"></i>
                                 <p>8:00 AM</p>
                             </div>
                             <div class="time-slot p-4 rounded-xl text-center font-semibold" onclick="selectTime('09:00')">
@@ -539,7 +542,7 @@
                                 <p>4:00 PM</p>
                             </div>
                             <div class="time-slot p-4 rounded-xl text-center font-semibold" onclick="selectTime('17:00')">
-                                <i class="fas fa-moon text-2xl mb-2 text-blue-500"></i>
+                                <i class="fas fa-sun text-2xl mb-2 text-orange-500"></i>
                                 <p>5:00 PM</p>
                             </div>
                         </div>
