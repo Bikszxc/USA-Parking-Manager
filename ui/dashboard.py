@@ -9,8 +9,8 @@ from PIL import Image, ImageTk, ImageSequence
 
 from logic.auth import account_login, account_creation
 from logic.models import new_car_owner, get_car_owners, get_owner_vehicles, record_found, get_owner, get_vehicle_type, \
-    park_vehicle, get_parking_slots, unpark_vehicle, get_parkslot_info, assign_vehicle, check_registration,\
-    renew_vehicle, check_plate_number, get_vehicles, get_vehicle_owner, get_reservations
+    park_vehicle, get_parking_slots, unpark_vehicle, get_parkslot_info, assign_vehicle, check_registration, \
+    renew_vehicle, check_plate_number, get_vehicles, get_vehicle_owner, get_reservations, get_res_id_details
 
 
 class App(tk.Tk):
@@ -409,7 +409,7 @@ class HomePage(tk.Frame):
 
         self.btn_reservation_view_more = tk.Button(self.frame_reservation_info, bg='#ffcc00', fg="black",
                                               text="View More Details", font=self.master.subheader_font, relief="flat",
-                                              padx=5, command=lambda: None)
+                                              padx=5)
         self.btn_reservation_view_more.grid(row=0, column=8, rowspan=2, sticky='nsew')
 
         for var in self.r_info.values():
@@ -583,6 +583,48 @@ class HomePage(tk.Frame):
         except Exception as e:
             print(f"Fetch Error!", e)
 
+    def open_view_more(self, slot_number):
+        reservation = get_res_id_details(slot_number)
+
+        self.r_more_info = {
+            "Reservation Name": tk.StringVar(),
+            "Reservation Date": tk.StringVar(),
+            "Reservation Time": tk.StringVar(),
+            "Contact Number": tk.StringVar(),
+            "Plate Number": tk.StringVar(),
+            "Vehicle Type": tk.StringVar(),
+            "Assigned Slot": tk.StringVar()
+        }
+
+        self.window_view_more = tk.Toplevel(self.frame_reservation_info, bg='#e6e6e6', padx=10, pady=10)
+        self.window_view_more.title("Reservation Details")
+        self.window_view_more.geometry("350x300")
+
+        self.frame_view_more = tk.Frame(self.window_view_more, bg='#b80000', padx=10, pady=10)
+        self.frame_view_more.grid(row=0, column=0, sticky='nsew')
+
+        tk.Frame(self.frame_view_more, bg='#b80000', height=50).grid(row=0, column=0, sticky='w')
+        tk.Label(self.frame_view_more, text="Reservation Details", bg='#b80000', fg="white",
+                 font=self.master.header_font).place(x=0, y=0)
+
+        for i, (label_text, var) in enumerate(self.r_more_info.items(), start=1):
+            tk.Label(self.frame_view_more, text=label_text, bg='#b80000', fg="white",
+                     font=self.master.subheader_font, pady=5).grid(row=i, column=0, sticky='w')
+            tk.Label(self.frame_view_more, textvariable=var, bg='#b80000', fg="white",
+                     font=self.master.login_font, pady=5).grid(row=i, column=1, sticky='e')
+
+        self.window_view_more.grid_columnconfigure(0, weight=1)
+        self.frame_view_more.grid_columnconfigure(1, weight=1)
+
+        self.r_more_info["Reservation Name"].set(reservation[1])
+        self.r_more_info["Reservation Date"].set(reservation[6])
+        self.r_more_info["Reservation Time"].set(reservation[7])
+        self.r_more_info["Contact Number"].set(reservation[3])
+        self.r_more_info["Plate Number"].set(reservation[4])
+        self.r_more_info["Vehicle Type"].set(reservation[5])
+        self.r_more_info["Assigned Slot"].set(reservation[9])
+
+
     def get_slot_info(self, slot_number):
 
         for text in self.r_info:
@@ -596,6 +638,7 @@ class HomePage(tk.Frame):
         if self.park_slot_buttons[slot_number]:
 
             result = next((res for res in self.park_slots if res[1] == slot_number))
+            reservation_info = get_res_id_details(result[1])
 
             self.v_info["Slot Number"].set(result[1])
             self.v_info["Plate Number"].set(result[5])
@@ -610,11 +653,12 @@ class HomePage(tk.Frame):
                 self.dropdown_park_slot.delete(0, "end")
                 self.dropdown_park_slot.insert(0, result[1])
 
-            if result[8]:
-                self.r_info["Reservation Name"].set(result[8])
-                self.r_info["Reservation Date"].set(result[9])
-                self.r_info["Reservation Type"].set(result[10])
+            if reservation_info:
+                self.r_info["Reservation Name"].set(reservation_info[1])
+                self.r_info["Reservation Date"].set(reservation_info[6])
+                self.r_info["Reservation Time"].set(reservation_info[7])
                 self.btn_reservation_view_more.grid()
+                self.btn_reservation_view_more.configure(command=lambda: self.open_view_more(result[1]))
 
     def filter_owner_vehicles(self, event):
         owner_name = self.dropdown_owner.get()
