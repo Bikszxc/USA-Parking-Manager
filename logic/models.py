@@ -208,6 +208,34 @@ def get_reservations():
         print(f"Error Occurred! {e}")
         return None
 
+def get_res_id_details(slot_number):
+    try:
+        current_datetime = ph_time
+        current_date =  current_datetime.strftime("%m-%d-%Y")
+        current_time = current_datetime.strftime("%H:%M")
+
+        cursor.execute('''
+            SELECT r.* FROM reservations r
+            JOIN accepted_reservations ar ON r.id = ar.reservation_id
+            WHERE ar.slot_number = ?
+            AND (
+                r.reservation_date > ? OR
+                (r.reservation_date = ? AND r.reservation_time >= ?)
+            )
+            ORDER BY r.reservation_date ASC, r.reservation_time ASC
+            LIMIT 1
+        ''', (slot_number, current_date, current_date, current_time))
+
+        next_reservation = cursor.fetchone()
+
+        if next_reservation:
+            return next_reservation
+
+        return None
+
+    except Exception as e:
+        print(f"Error Occurred! {e}")
+        return None
 
 def get_owner(owner_name: str):
     try:
