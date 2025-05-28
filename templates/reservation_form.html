@@ -190,6 +190,20 @@
             color: var(--usa-red);
         }
 
+        .time-slot.disabled {
+            background-color: #f5f5f5;
+            color: #999;
+            cursor: not-allowed;
+            opacity: 0.6;
+            border-color: #ddd;
+            pointer-events: none;
+        }
+
+        .time-slot.disabled:hover {
+            background-color: #f5f5f5; /* Prevent hover state changes */
+            transform: none; /* Disable any hover animations */
+        }
+
         .question-number {
             background: var(--usa-yellow);
             color: var(--usa-red);
@@ -500,8 +514,18 @@
                             </h2>
                         </div>
 
-                        <div class="time-grid grid grid-cols-2 md:grid-cols-3 gap-4">
-                            <div class="time-slot p-4 rounded-xl text-center font-semibold" onclick="selectTime('08:00')">
+                        <div class="flex items-center mb-3">
+                                <h2 class="question-title text-xl md:text-2xl font-bold text-white">
+                                    Morning
+                                </h2>
+                            </div>
+
+                        <div class="time-grid grid grid-cols-2 md:grid-cols-3 gap-4 mb-3">
+                            <div class="time-slot p-4 rounded-xl text-center font-semibold" onclick="selectTime('06:00')">
+                                <i class="fas fa-sun text-2xl mb-2 text-yellow-500"></i>
+                                <p>6:00 AM</p>
+                            </div>
+                            <div class="time-slot p-4 rounded-xl text-center font-semibold" onclick="selectTime('07:00')">
                                 <i class="fas fa-sun text-2xl mb-2 text-yellow-500"></i>
                                 <p>7:00 AM</p>
                             </div>
@@ -521,6 +545,14 @@
                                 <i class="fas fa-sun text-2xl mb-2 text-yellow-500"></i>
                                 <p>11:00 AM</p>
                             </div>
+                        </div>
+                            <div class="flex items-center mb-3">
+                                <h2 class="question-title text-xl md:text-2xl font-bold text-white">
+                                    Afternoon
+                                </h2>
+                            </div>
+
+                        <div class="time-grid grid grid-cols-2 md:grid-cols-3 gap-4">
                             <div class="time-slot p-4 rounded-xl text-center font-semibold" onclick="selectTime('12:00')">
                                 <i class="fas fa-sun text-2xl mb-2 text-orange-500"></i>
                                 <p>12:00 PM</p>
@@ -569,8 +601,9 @@
                                 Review your reservation
                             </h2>
                         </div>
+                   </div>
 
-                        <div class="bg-white bg-opacity-95 rounded-xl p-6 space-y-4">
+                        <div class="bg-white bg-opacity-95 rounded-xl p-6 space-y-4 mb-6">
                             <div class="flex justify-between items-center border-b pb-2">
                                 <span class="font-semibold text-gray-600">Name:</span>
                                 <span id="reviewName" class="text-gray-800 font-bold"></span>
@@ -600,7 +633,6 @@
                                 <span id="reviewTime" class="text-gray-800 font-bold"></span>
                             </div>
                         </div>
-                    </div>
 
                     <div class="flex justify-between">
                         <button type="button" onclick="prevStep()" class="btn-secondary py-3 px-6 rounded-xl">
@@ -682,7 +714,7 @@
                     return document.getElementById('name').value.trim() !== '';
                 case 3:
                     return document.getElementById('email').value.trim() !== '' &&
-                           document.getElementById('email').validity.valid;
+                        document.getElementById('email').validity.valid;
                 case 4:
                     return document.getElementById('contact').value.trim() !== '';
                 case 5:
@@ -860,6 +892,55 @@
             updateCalendar();
         }
 
+        function validateTimeSlots() {
+            const timeSlots = document.querySelectorAll('.time-slot');
+            const today = new Date();
+
+            // Check if selected date is today
+            const timezoneOffset = selectedDate.getTimezoneOffset() * 60000;
+            const localDate = new Date(selectedDate.getTime() - timezoneOffset);
+            const isToday = localDate.toDateString() === today.toDateString();
+
+            if (isToday) {
+                // Get current time in minutes
+                const currentHour = today.getHours();
+                const currentMinute = today.getMinutes();
+                const currentTimeInMinutes = currentHour * 60 + currentMinute;
+
+                const bufferMinutes = 60;
+                const minimumBookingTime = currentTimeInMinutes + bufferMinutes;
+
+                // Check each time slot
+                timeSlots.forEach(slot => {
+                    // Extract the time from the onclick attribute instead of text content
+                    const onclickAttr = slot.getAttribute('onclick');
+                    const timeMatch = onclickAttr.match(/selectTime\('(\d{2}:\d{2})'\)/);
+
+                    if (timeMatch) {
+                        const slotTime = timeMatch[1]; // This will be in 24-hour format like '08:00'
+                        const [slotHour, slotMinute] = slotTime.split(':').map(Number);
+                        const slotTimeInMinutes = slotHour * 60 + slotMinute;
+
+                        if (slotTimeInMinutes <= minimumBookingTime) {
+                            slot.classList.add('disabled');
+                            // Add pointer-events: none to prevent clicking
+                            slot.style.pointerEvents = 'none';
+                        } else {
+                            slot.classList.remove('disabled');
+                            slot.style.pointerEvents = 'auto';
+                        }
+                    }
+                });
+            } else {
+                // If not today, enable all time slots
+                timeSlots.forEach(slot => {
+                    slot.classList.remove('disabled');
+                    slot.style.pointerEvents = 'auto';
+                });
+            }
+        }
+
+        // Updated selectDate function
         function selectDate(day) {
             const dateCells = document.querySelectorAll('.date-cell');
             dateCells.forEach(cell => cell.classList.remove('selected'));
@@ -867,16 +948,33 @@
             event.currentTarget.classList.add('selected');
 
             selectedDate = new Date(currentYear, currentMonth, day);
-            const formattedDate = selectedDate.toISOString().split('T')[0];
+            console.log(selectedDate);
+
+            // Apply timezone offset to get local date string
+            const timezoneOffset = selectedDate.getTimezoneOffset() * 60000;
+            const localDate = new Date(selectedDate.getTime() - timezoneOffset);
+            const formattedDate = localDate.toISOString().split('T')[0];
+
+            console.log(formattedDate);
             document.getElementById('reservationDate').value = formattedDate;
+
+            // Validate time slots after selecting date
+            validateTimeSlots();
 
             const btn = document.getElementById('btn-step-7');
             btn.disabled = false;
         }
 
+        // Updated selectTime function
         function selectTime(time) {
             const timeSlots = document.querySelectorAll('.time-slot');
             timeSlots.forEach(slot => slot.classList.remove('selected'));
+
+            // Check if trying to select a disabled time slot
+            if (event.currentTarget.classList.contains('disabled')) {
+                alert('Please select an available time slot.');
+                return;
+            }
 
             event.currentTarget.classList.add('selected');
             selectedTime = time;
