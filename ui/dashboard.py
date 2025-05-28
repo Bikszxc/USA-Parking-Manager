@@ -360,13 +360,17 @@ class HomePage(tk.Frame):
 
     def refresh_data(self):
         self.fetch_database(None)
+        self.start_timer_updates()
+
+    def start_timer_updates(self):
+        self.update_timers_only()
+        self.after(1000, self.start_timer_updates)
 
     def _initialize_inner_frames(self):
         self.frame_park_vehicle = tk.Frame(self, bg='#b80000', padx=10, pady=10)
         self.frame_vehicle_info = tk.Frame(self, bg='#b80000', padx=10, pady=10)
         self.frame_park_slots = tk.Frame(self, bg='#b80000', padx=10, pady=10)
         self.frame_reservation_info = tk.Frame(self.frame_park_slots, bg='#b80000')
-
 
     def _initialize_frame_titles(self):
         for (title, f) in self.frames.items():
@@ -440,9 +444,35 @@ class HomePage(tk.Frame):
         i = 1
 
         for slot in self.park_slots:
-            bgcolor = "green" if slot[2] == 0 else "gray"
-            pkg_text = f"{slot[1]}\nAvailable\n" if slot[2] == 0 else f"{slot[1]}\n{slot[5]}\n{slot[3]}"
-            button = tk.Button(self.frame_park_slots, text=pkg_text, bg=bgcolor, fg="white", width=20, command=lambda x=slot[1]: self.get_slot_info(x),
+            slot_number = slot[1]
+            slot_status = slot[2]
+            has_reservation = get_res_id_details(slot_number)
+
+            fgcolor = "white"
+
+            if has_reservation and slot_status == 1:
+                bgcolor = "blue"
+            elif has_reservation and slot_status == 0:
+                bgcolor = "yellow"
+                fgcolor = "black"
+            elif not has_reservation and slot_status == 1:
+                bgcolor = "gray"
+            else:
+                bgcolor = "green"
+
+            timer_text = None
+            if has_reservation:
+                timer_text = self.reservation_timer(has_reservation[7], has_reservation[8])
+
+            if timer_text:
+                if slot_status == 0:
+                    pkg_text = f"{slot_number}\nAvailable\nReservation in: {timer_text}"
+                else:
+                    pkg_text = f"{slot_number}\n{slot[5]}\n{slot[3]}\nReservation in: {timer_text}"
+            else:
+                pkg_text = f"{slot_number}\nAvailable\n" if slot_status == 0 else f"{slot_number}\n{slot[5]}\n{slot[3]}"
+
+            button = tk.Button(self.frame_park_slots, text=pkg_text, bg=bgcolor, fg=fgcolor, width=20, command=lambda x=slot[1]: self.get_slot_info(x),
                                anchor="center", font=("Helvetica", 10), relief="ridge")
             button.grid(row=i, column=j, sticky='nsew')
 
@@ -555,6 +585,91 @@ class HomePage(tk.Frame):
         self.grid_columnconfigure(2, weight=2)
         self.grid_rowconfigure(2, weight=10)
 
+    def update_timers_only(self):
+        """Update only the timer displays without refreshing database"""
+        try:
+            timer_expired = False
+
+            for slot in self.park_slots:
+                slot_number = slot[1]
+                slot_status = slot[2]
+
+                prev_status = self.previous_slot_status.get(slot_number)
+                has_reservation = get_res_id_details(slot_number)
+                current_status = (slot_status, has_reservation)
+
+                timer_text = None
+                just_expired = False
+                if has_reservation:
+                    timer_result = self.reservation_timer(has_reservation[7], has_reservation[8])
+                    if timer_result:
+                        timer_text, just_expired = timer_result
+                        if just_expired:
+                            timer_expired = True
+
+                should_update = (prev_status != current_status) or timer_text
+
+                if should_update:
+                    if timer_text:
+                        if slot_status == 0:
+                            pkg_text = f"{slot_number}\nAvailable\nReservation in: {timer_text}"
+                        else:
+                            pkg_text = f"{slot_number}\n{slot[5]}\n{slot[3]}\nReservation in: {timer_text}"
+                    else:
+                        pkg_text = f"{slot_number}\nAvailable\n" if slot_status == 0 else f"{slot_number}\n{slot[5]}\n{slot[3]}"
+
+                    if slot_number in self.park_slot_buttons:
+                        self.park_slot_buttons[slot_number].config(text=pkg_text)
+
+            if timer_expired:
+                print("Timer expired - refreshing database")
+                self.fetch_database(None)
+
+        except Exception as e:
+            print(f"Timer update error!", e)
+
+    def reservation_timer(self, reservation_date, reservation_time):
+        """
+        Calculate timer if reservation is today and within 1 hour
+        Returns formatted timer string or None
+        """
+        try:
+            # GMT+8 timezone offset
+            ph_offset = timezone(timedelta(hours=8))
+            ph_time = datetime.now(ph_offset)
+
+            # Combine date and time
+            reservation_datetime_str = f"{reservation_date} {reservation_time}"
+            res_time = datetime.strptime(reservation_datetime_str, "%m-%d-%Y %H:%M")
+
+            ph_time = ph_time.replace(tzinfo=None)
+            fake_ph_time = ph_time + timedelta(hours=2)
+
+            # Check if reservation is today
+            if res_time.date() != ph_time.date():
+                return None
+
+            # Calculate time difference
+            time_diff = res_time - ph_time
+
+            # Check if reservation is within 1 hour and in the future
+            if time_diff.total_seconds() <= 0 or time_diff.total_seconds() > 3600:
+                return None
+
+            # Format the countdown timer
+            total_seconds = int(time_diff.total_seconds())
+            minutes = total_seconds // 60
+            seconds = total_seconds % 60
+
+            timer_text = f"{minutes:02d}:{seconds:02d}"
+            just_expired = total_seconds <= 1
+
+            return timer_text, just_expired
+
+        except Exception as e:
+            print(f"Timer calculation error: {e}")
+            return None
+
     def fetch_database(self, event):
         try:
             self.car_owners = sorted([name[1] for name in get_car_owners()])
@@ -566,20 +681,51 @@ class HomePage(tk.Frame):
             self.dropdown_plate_number.config(values=self.vehicles)
             self.dropdown_park_slot.config(values=self.slot_numbers)
 
+            timer_expired = False
+
             for slot in self.park_slots:
                 slot_number = slot[1]
                 slot_status = slot[2]
 
-                prev_status = self.previous_slot_status.get(slot_number)
+                prev_status = (self.previous_slot_status.get(slot_number), get_res_id_details(slot_number))
+                has_reservation = get_res_id_details(slot_number)
+                current_status = (slot_status, has_reservation)
 
-                if prev_status != slot_status:
-                    bgcolor = "green" if slot_status == 0 else ("gray")
+                timer_text = None
+                just_expired = False
+
+                fgcolor = "white"
+
+                if prev_status != current_status:
+                    if has_reservation and slot_status == 1:
+                        bgcolor = "blue"
+                    elif has_reservation and slot_status == 0:
+                        bgcolor = "yellow"
+                        fgcolor = "black"
+                    elif not has_reservation and slot_status == 1:
+                        bgcolor = "gray"
+                    else:
+                        bgcolor = "green"
+
+                if has_reservation:
+                    timer_result = self.reservation_timer(has_reservation[7], has_reservation[8])
+                    if timer_result:
+                        timer_text, just_expired = timer_result
+                        if just_expired:
+                            timer_expired = True
+
+                if timer_text and not timer_expired:
+                    if slot_status == 0:
+                        pkg_text = f"{slot_number}\nAvailable\nReservation in: {timer_text}"
+                    else:
+                        pkg_text = f"{slot_number}\n{slot[5]}\n{slot[3]}\nReservation in: {timer_text}"
+                else:
                     pkg_text = f"{slot_number}\nAvailable\n" if slot_status == 0 else f"{slot_number}\n{slot[5]}\n{slot[3]}"
 
-                    if slot_number in self.park_slot_buttons:
-                        self.park_slot_buttons[slot_number].config(text=pkg_text, bg=bgcolor)
+                if slot_number in self.park_slot_buttons:
+                    self.park_slot_buttons[slot_number].config(text=pkg_text, bg=bgcolor, fg=fgcolor)
 
-                self.previous_slot_status[slot_number] = slot_status
+                self.previous_slot_status[slot_number] = (slot_status, has_reservation)
         except Exception as e:
             print(f"Fetch Error!", e)
 
@@ -590,6 +736,7 @@ class HomePage(tk.Frame):
             "Reservation Name": tk.StringVar(),
             "Reservation Date": tk.StringVar(),
             "Reservation Time": tk.StringVar(),
+            "Owner Type": tk.StringVar(),
             "Contact Number": tk.StringVar(),
             "Plate Number": tk.StringVar(),
             "Vehicle Type": tk.StringVar(),
@@ -598,10 +745,13 @@ class HomePage(tk.Frame):
 
         self.window_view_more = tk.Toplevel(self.frame_reservation_info, bg='#e6e6e6', padx=10, pady=10)
         self.window_view_more.title("Reservation Details")
-        self.window_view_more.geometry("350x300")
+        self.window_view_more.geometry("350x380")
 
         self.frame_view_more = tk.Frame(self.window_view_more, bg='#b80000', padx=10, pady=10)
         self.frame_view_more.grid(row=0, column=0, sticky='nsew')
+
+        self.btn_frame = tk.Frame(self.window_view_more, bg='#b80000', padx=10, pady=10)
+        self.btn_frame.grid(row=1, column=0, sticky='nsew')
 
         tk.Frame(self.frame_view_more, bg='#b80000', height=50).grid(row=0, column=0, sticky='w')
         tk.Label(self.frame_view_more, text="Reservation Details", bg='#b80000', fg="white",
@@ -615,14 +765,26 @@ class HomePage(tk.Frame):
 
         self.window_view_more.grid_columnconfigure(0, weight=1)
         self.frame_view_more.grid_columnconfigure(1, weight=1)
+        self.frame_view_more.grid_columnconfigure(0, weight=1)
+        self.btn_frame.grid_columnconfigure(0, weight=1)
+        self.btn_frame.grid_columnconfigure(1, weight=1)
 
         self.r_more_info["Reservation Name"].set(reservation[1])
-        self.r_more_info["Reservation Date"].set(reservation[6])
-        self.r_more_info["Reservation Time"].set(reservation[7])
-        self.r_more_info["Contact Number"].set(reservation[3])
-        self.r_more_info["Plate Number"].set(reservation[4])
-        self.r_more_info["Vehicle Type"].set(reservation[5])
-        self.r_more_info["Assigned Slot"].set(reservation[9])
+        self.r_more_info["Reservation Date"].set(reservation[7])
+        self.r_more_info["Reservation Time"].set(reservation[8])
+        self.r_more_info["Owner Type"].set(reservation[2])
+        self.r_more_info["Contact Number"].set(reservation[4])
+        self.r_more_info["Plate Number"].set(reservation[5])
+        self.r_more_info["Vehicle Type"].set(reservation[6])
+        self.r_more_info["Assigned Slot"].set(reservation[10])
+
+        self.btn_park_reservation = tk.Button(self.btn_frame, text="Park Reservation", bg='#ffcc00', fg="black",
+                                              font=self.master.subheader_font, relief="flat", command=lambda: None)
+        self.btn_park_reservation.grid(row=0, column=0, sticky='w')
+
+        self.btn_cancel_reservation = tk.Button(self.btn_frame, text="Cancel Reservation", bg='red',
+                                              fg="white", relief="flat", font=self.master.subheader_font, command=lambda: None)
+        self.btn_cancel_reservation.grid(row=0, column=1, sticky='e')
 
 
     def get_slot_info(self, slot_number):
@@ -655,8 +817,8 @@ class HomePage(tk.Frame):
 
             if reservation_info:
                 self.r_info["Reservation Name"].set(reservation_info[1])
-                self.r_info["Reservation Date"].set(reservation_info[6])
-                self.r_info["Reservation Time"].set(reservation_info[7])
+                self.r_info["Reservation Date"].set(reservation_info[7])
+                self.r_info["Reservation Time"].set(reservation_info[8])
                 self.btn_reservation_view_more.grid()
                 self.btn_reservation_view_more.configure(command=lambda: self.open_view_more(result[1]))
 
