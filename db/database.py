@@ -109,6 +109,7 @@ def init_db():
         CREATE TABLE IF NOT EXISTS reservations (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL,
+        type TEXT NOT NULL,
         email TEXT NOT NULL,
         contact_number TEXT NOT NULL,
         plate_number TEXT NOT NULL,
