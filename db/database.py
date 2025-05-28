@@ -84,11 +84,7 @@ def init_db():
         owner_name TEXT,
         plate_number TEXT,
         type TEXT,
-        contact_number TEXT,
-        reservation_id INTEGER,
-        reservation_date TEXT,
-        reservation_time TEXT,
-        FOREIGN KEY (reservation_id) REFERENCES reservations(id)
+        contact_number TEXT
         )
     ''')
 
@@ -122,6 +118,27 @@ def init_db():
         status TEXT NOT NULL DEFAULT 'PENDING',
         assigned_slot TEXT
         )
+    ''')
+
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS accepted_reservations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        slot_number TEXT NOT NULL,
+        reservation_id TEXT,
+        FOREIGN KEY (reservation_id) REFERENCES reservations(id)
+        )
+    ''')
+
+    cursor.execute('''
+        CREATE TRIGGER IF NOT EXISTS accept_reservation
+            AFTER UPDATE OF status
+            ON reservations
+            FOR EACH ROW
+            WHEN NEW.status = 'ACCEPTED'
+        BEGIN
+            INSERT INTO accepted_reservations (slot_number, reservation_id)
+            VALUES (NEW.assigned_slot, NEW.id);
+        END
     ''')
 
     conn.commit()
