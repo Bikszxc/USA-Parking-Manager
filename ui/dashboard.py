@@ -10,7 +10,8 @@ from PIL import Image, ImageTk, ImageSequence
 from logic.auth import account_login, account_creation
 from logic.models import new_car_owner, get_car_owners, get_owner_vehicles, record_found, get_owner, get_vehicle_type, \
     park_vehicle, get_parking_slots, unpark_vehicle, get_parkslot_info, assign_vehicle, check_registration, \
-    renew_vehicle, check_plate_number, get_vehicles, get_vehicle_owner, get_reservations, get_res_id_details
+    renew_vehicle, check_plate_number, get_vehicles, get_vehicle_owner, get_reservations, get_res_id_details, \
+    accept_reservation, reject_reservation
 
 
 class App(tk.Tk):
@@ -448,14 +449,39 @@ class HomePage(tk.Frame):
             slot_status = slot[2]
             has_reservation = get_res_id_details(slot_number)
 
+            upcoming_reservation = False  # Initialize as False
+
+            if has_reservation:
+                res_date = datetime.strptime(has_reservation[7], "%m-%d-%Y")
+                res_time = datetime.strptime(has_reservation[8], "%H:%M")
+
+                # Get current date and time
+                current_date = datetime.now().date()
+                current_time = datetime.now().time()
+
+                # Check if reservation is today
+                if res_date.date() == current_date:
+                    # Fix: Use .date() and .time() to extract the components properly
+                    reservation_datetime = datetime.combine(res_date.date(), res_time.time())
+                    current_datetime = datetime.now()
+
+                    # Check if current time is within 1 hour before reservation
+                    time_diff = reservation_datetime - current_datetime
+
+                    # If time difference is between 0 and 1 hour (3600 seconds)
+                    if 0 <= time_diff.total_seconds() <= 3600:
+                        upcoming_reservation = True
+
+                print(f"Slot {slot_number}: upcoming_reservation = {upcoming_reservation}")
+
             fgcolor = "white"
 
-            if has_reservation and slot_status == 1:
+            if upcoming_reservation and slot_status == 1:
                 bgcolor = "blue"
-            elif has_reservation and slot_status == 0:
+            elif upcoming_reservation and slot_status == 0:
                 bgcolor = "yellow"
                 fgcolor = "black"
-            elif not has_reservation and slot_status == 1:
+            elif not upcoming_reservation and slot_status == 1:
                 bgcolor = "gray"
             else:
                 bgcolor = "green"
@@ -472,7 +498,8 @@ class HomePage(tk.Frame):
             else:
                 pkg_text = f"{slot_number}\nAvailable\n" if slot_status == 0 else f"{slot_number}\n{slot[5]}\n{slot[3]}"
 
-            button = tk.Button(self.frame_park_slots, text=pkg_text, bg=bgcolor, fg=fgcolor, width=20, command=lambda x=slot[1]: self.get_slot_info(x),
+            button = tk.Button(self.frame_park_slots, text=pkg_text, bg=bgcolor, fg=fgcolor, width=20,
+                               command=lambda x=slot[1]: self.get_slot_info(x),
                                anchor="center", font=("Helvetica", 10), relief="ridge")
             button.grid(row=i, column=j, sticky='nsew')
 
@@ -694,18 +721,38 @@ class HomePage(tk.Frame):
                 timer_text = None
                 just_expired = False
 
-                fgcolor = "white"
+                upcoming_reservation = False
 
-                if prev_status != current_status:
-                    if has_reservation and slot_status == 1:
-                        bgcolor = "blue"
-                    elif has_reservation and slot_status == 0:
-                        bgcolor = "yellow"
-                        fgcolor = "black"
-                    elif not has_reservation and slot_status == 1:
-                        bgcolor = "gray"
-                    else:
-                        bgcolor = "green"
+                if has_reservation:
+                    res_date = datetime.strptime(has_reservation[7], "%m-%d-%Y")
+                    res_time = datetime.strptime(has_reservation[8], "%H:%M")
+
+                    current_date = datetime.now().date()
+                    current_time = datetime.now().time()
+
+                    if res_date.date() == current_date:
+                        # Fix: Use reservation time, not current time
+                        reservation_datetime = datetime.combine(res_date.date(), res_time.time())
+                        current_datetime = datetime.now()
+
+                        time_diff = reservation_datetime - current_datetime
+
+                        if 0 <= time_diff.total_seconds() <= 3600:
+                            upcoming_reservation = True
+
+                fgcolor = "white"
+                bgcolor = "green"  # Default color
+
+                # Always set the color based on current conditions, not just when status changes
+                if upcoming_reservation and slot_status == 1:
+                    bgcolor = "blue"
+                elif upcoming_reservation and slot_status == 0:
+                    bgcolor = "yellow"
+                    fgcolor = "black"
+                elif slot_status == 1:
+                    bgcolor = "gray"
+                else:
+                    bgcolor = "green"
 
                 if has_reservation:
                     timer_result = self.reservation_timer(has_reservation[7], has_reservation[8])
@@ -915,7 +962,6 @@ class ReservationsPage(tk.Frame):
         self._initialize_action_widgets()
         self._initialize_buttons()
         self._create_table()
-        self.create_buttons()
         self.fetch_reservations()
 
     def refresh_data(self):
@@ -977,13 +1023,23 @@ class ReservationsPage(tk.Frame):
 
         self.reservation_details.columnconfigure(2, weight=1)
 
+        self.reservations_actions.columnconfigure(1, weight=2)
+        self.reservations_actions.columnconfigure(2, weight=1)
+
     def _initialize_action_widgets(self):
-        label_select_slot = tk.Label(self.reservations_actions, text="Select a slot:", font=self.master.subheader_font, bg="#b80000", fg="white")
+        label_select_slot = tk.Label(self.reservations_actions, text="Select a slot:", font=self.master.subheader_font, bg="#8f0000", fg="white")
         label_select_slot.grid(row=1, column=0, sticky="w")
+
+        self.selected_slot = tk.StringVar()
+        self.selected_slot.set("None")
+
+        label_selected_slot = tk.Label(self.reservations_actions, textvariable=self.selected_slot, font=self.master.login_font, bg="#8f0000", fg="white")
+        label_selected_slot.grid(row=1, column=1, sticky="e")
 
     def _initialize_detail_labels(self):
         self.details = {
             "Owner Name": tk.StringVar(),
+            "Owner Type": tk.StringVar(),
             "Email": tk.StringVar(),
             "Contact Number": tk.StringVar(),
             "Plate Number": tk.StringVar(),
@@ -995,12 +1051,155 @@ class ReservationsPage(tk.Frame):
 
         for i, (label_text, var) in enumerate(self.details.items(), start=1):
             tk.Label(self.reservation_details, text=label_text, bg='#8f0000', fg="white",
-                     font=self.master.subheader_font, pady=5).grid(row=i, column=0, sticky='w')
+                     font=self.master.subheader_font, pady=3).grid(row=i, column=0, sticky='w')
             tk.Label(self.reservation_details, textvariable=var, bg='#8f0000', fg="white",
-                     font=self.master.login_font, pady=5, width=20, anchor='e').grid(row=i, column=2, sticky='e')
+                     font=self.master.login_font, pady=3, width=20, anchor='e').grid(row=i, column=2, sticky='e')
 
     def _initialize_buttons(self):
-        pass
+        select_slot_button = tk.Button(self.reservations_actions, text="View Grid", bg="#ffcc00", fg="black",
+                                       relief="flat", command=self.slot_selection_window)
+        select_slot_button.grid(row=1, column=2, sticky="ne")
+
+        tk.Frame(self.reservations_actions, height=5, bg="#8f0000").grid(row=2, column=0, sticky="nsew")
+
+        accept_reservation_button = tk.Button(self.reservations_actions, text="Accept Reservation", bg="green", fg="white",
+                                              relief="flat", command=self.accept_reservation)
+        accept_reservation_button.grid(row=3, column=0, columnspan=3, sticky="nsew")
+
+        tk.Frame(self.reservations_actions, height=5, bg="#8f0000").grid(row=4, column=0, sticky="nsew")
+
+        reject_reservation_button = tk.Button(self.reservations_actions, text="Reject Reservation", bg="gray",
+                                              relief="flat", command=self.reject_reservation)
+        reject_reservation_button.grid(row=5, column=0, columnspan=3, sticky="nsew")
+
+        tk.Frame(self.reservations_actions, height=5, bg="#8f0000").grid(row=6, column=0, sticky="nsew")
+
+        refresh_button = tk.Button(self.reservations_actions, text="Refresh", bg="#ffcc00", fg="black", relief="flat",
+                                   command=self.fetch_reservations)
+        refresh_button.grid(row=7, column=0, columnspan=3, sticky="nsew")
+
+    def slot_selection_window(self):
+        window = tk.Toplevel(self.reservations_actions, bg="#e6e6e6")
+        window.title("Assign Slot to Reservation")
+        window.geometry("800x600")
+
+        frame_park_slots = tk.Frame(window, bg="#b80000", padx=5, pady=5)
+        frame_park_slots.pack(pady=20, padx=20, fill="both", expand=True)
+
+        for col in range(5):
+            frame_park_slots.columnconfigure(col, weight=1)
+
+        j = 0
+        i = 1
+        park_slot_buttons = {}
+
+        for slot in self.park_slots:
+            slot_number = slot[1]
+            slot_status = slot[2]
+            has_reservation = get_res_id_details(slot_number)
+
+            upcoming_reservation = False
+
+            if has_reservation:
+                res_date = datetime.strptime(has_reservation[7], "%m-%d-%Y")
+                res_time = datetime.strptime(has_reservation[8], "%H:%M")
+
+                current_date = datetime.now().date()
+
+                if res_date.date() == current_date:
+                    reservation_datetime = datetime.combine(res_date.date(), res_time.time())
+                    current_datetime = datetime.now()
+
+                    time_diff = reservation_datetime - current_datetime
+
+                    if 0 <= time_diff.total_seconds() <= 3600:
+                        upcoming_reservation = True
+
+            fgcolor = "white"
+
+            if upcoming_reservation and slot_status == 1:
+                bgcolor = "blue"
+            elif upcoming_reservation and slot_status == 0:
+                bgcolor = "yellow"
+                fgcolor = "black"
+            elif not upcoming_reservation and slot_status == 1:
+                bgcolor = "gray"
+            else:
+                bgcolor = "green"
+
+            has_reservation_today = False
+            if has_reservation:
+                res_date = datetime.strptime(has_reservation[7], "%m-%d-%Y")
+                current_date = datetime.now().date()
+
+                if res_date.date() == current_date:
+                    has_reservation_today = True
+
+            pkg_text = f"{slot_number}\nAvailable\n" if slot_status == 0 else f"{slot_number}\n{slot[5]}\n{slot[3]}"
+
+            button_state = "disabled" if has_reservation_today else "normal"
+
+            button = tk.Button(frame_park_slots, text=pkg_text, bg=bgcolor, fg=fgcolor, width=20,
+                               command=lambda x=slot[1]: self.select_slot_for_reservation(x, window),
+                               anchor="center", font=("Helvetica", 10), relief="ridge", state=button_state)
+            button.grid(row=i, column=j, sticky='nsew', padx=2, pady=2)
+
+            park_slot_buttons[slot[1]] = button
+
+            j += 1
+
+            if j == 5:
+                j = 0
+                i += 1
+
+        for row in range(i + 1):
+            frame_park_slots.rowconfigure(row, weight=1)
+
+    def select_slot_for_reservation(self, slot_number, window):
+        self.selected_slot.set(slot_number)
+        window.destroy()
+
+    def accept_reservation(self):
+        try:
+            slot_number = self.selected_slot.get()
+
+            if not slot_number or slot_number == "None":
+                raise Exception(messagebox.showerror("Error", "Select a parking slot first."))
+
+            selection = self.reservation_table.selection()
+
+            if not selection:
+                raise Exception(messagebox.showerror("Error", "Select a reservation first."))
+
+            reservation_values = self.reservation_table.item(selection[0], 'values')
+
+            if reservation_values[9] != "PENDING":
+                raise Exception(messagebox.showerror("Error", "That reservation is already approved or rejected."))
+
+            if accept_reservation(reservation_values[0], slot_number):
+                messagebox.showinfo("Success", f"Reservation {reservation_values[0]} is accepted and assigned to {slot_number}")
+                self.fetch_reservations()
+        except Exception as e:
+            print(f"Error Occurred!", e)
+
+    def reject_reservation(self):
+        try:
+            selection = self.reservation_table.selection()
+
+            if not selection:
+                raise Exception(messagebox.showerror("Error", "Select a reservation first."))
+
+            reservation_values = self.reservation_table.item(selection[0], 'values')
+
+            if reservation_values[9] != "PENDING":
+                raise Exception(messagebox.showerror("Error", "That reservation is already approved or rejected."))
+
+            if reject_reservation(reservation_values[0]):
+                messagebox.showinfo("Success", f"Reservation {reservation_values[0]} is rejected.")
+                self.fetch_reservations()
+        except Exception as e:
+            print(f"Error Occurred!", e)
+
 
     def _initialize_table_style(self):
         style = ttk.Style()
@@ -1016,7 +1215,7 @@ class ReservationsPage(tk.Frame):
         style.map("Custom.Treeview", background=[("selected", "#3390FF")], foreground=[("selected", "white")], bordercolor=[("selected", "black")], borderwidth=[("selected", 2)])
 
     def _create_table(self):
-        table_columns = ("ID", "Name", "Email", "Contact Number", "Plate Number", "Vehicle Type", "Reservation Date", "Reservation Time")
+        table_columns = ("ID", "Name", "Type", "Email", "Contact Number", "Plate Number", "Vehicle Type", "Reservation Date", "Reservation Time")
 
         self.reservation_table = ttk.Treeview(self.reservation_manager, columns=table_columns, show="headings", style="Custom.Treeview", selectmode="browse")
 
@@ -1027,7 +1226,7 @@ class ReservationsPage(tk.Frame):
                 self.reservation_table.column(col, width=40, minwidth=40)
             elif col in ("Name", "Email"):
                 self.reservation_table.column(col, width=150, minwidth=100)
-            elif col in ("Plate Number", "Vehicle Type"):
+            elif col in ("Plate Number", "Vehicle Type", "Type"):
                 self.reservation_table.column(col, width=100, minwidth=60)
             else:
                 self.reservation_table.column(col, width=120, minwidth=80)
@@ -1061,15 +1260,10 @@ class ReservationsPage(tk.Frame):
         for i, results in enumerate(self.details.values(), start=1):
             results.set(values[i])
 
-    def create_buttons(self):
-        select_slot_button = tk.Button(self.reservations_actions, text="View Grid", bg="#ffcc00", fg="black", relief="flat")
-        select_slot_button.grid(row=1, column=1, sticky="nsew")
-
-        refresh_button = tk.Button(self.reservations_actions, text="Refresh", bg="#ffcc00", fg="black", relief="flat", command=self.fetch_reservations)
-        refresh_button.grid(row=2, column=0, sticky="nsew")
-
     def fetch_reservations(self):
         try:
+            self.park_slots = sorted([slot for slot in get_parking_slots()])
+
             self.reservation_table.delete(*self.reservation_table.get_children())
 
             reservations_data = get_reservations()
@@ -1078,9 +1272,9 @@ class ReservationsPage(tk.Frame):
                 return
 
             for i, reservations in enumerate(reservations_data):
-                if reservations[8] == "PENDING":
+                if reservations[9] == "PENDING":
                     tag = "pending"
-                elif reservations[8] == "APPROVED":
+                elif reservations[9] == "APPROVED":
                     tag = "approved"
                 else:
                     tag = "rejected"
