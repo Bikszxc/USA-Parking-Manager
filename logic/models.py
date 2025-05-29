@@ -17,7 +17,7 @@ def new_admin_log(admin_name, action):
     except Exception as e:
         print(f"Error Occurred! {e}")
 
-def create_reservation(name, email, contact_number, plate_number, vehicle_type, reservation_date, reservation_time):
+def create_reservation(name, type, email, contact_number, plate_number, vehicle_type, reservation_date, reservation_time):
     try:
         api_conn = get_connection()
         api_cursor = api_conn.cursor()
@@ -25,8 +25,8 @@ def create_reservation(name, email, contact_number, plate_number, vehicle_type, 
         reservation_date = datetime.strptime(reservation_date, "%Y-%m-%d")
         reservation_time = datetime.strptime(reservation_time, "%H:%M")
 
-        api_cursor.execute("INSERT INTO reservations (name, email, contact_number, plate_number, vehicle_type, reservation_date, reservation_time) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                       (name, email, contact_number, plate_number, vehicle_type, reservation_date.strftime("%m-%d-%Y"), reservation_time.strftime("%H:%M")))
+        api_cursor.execute("INSERT INTO reservations (name, type, email, contact_number, plate_number, vehicle_type, reservation_date, reservation_time) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                       (name, type, email, contact_number, plate_number, vehicle_type, reservation_date.strftime("%m-%d-%Y"), reservation_time.strftime("%H:%M")))
 
         api_conn.commit()
 
@@ -114,6 +114,33 @@ def assign_vehicle(owner_name, plate_number, vehicle_type, expiration_date) -> b
             return True
 
         return False
+    except Exception as e:
+        print("Error Occurred!", e)
+        return False
+
+def accept_reservation(reservation_id, slot_number):
+    try:
+        cursor.execute('''UPDATE reservations
+                        SET status = ?,
+                            assigned_slot = ?
+                        WHERE id = ?
+        ''', ("APPROVED", slot_number, reservation_id))
+        conn.commit()
+
+        return True
+    except Exception as e:
+        print("Error Occurred!", e)
+        return False
+
+def reject_reservation(reservation_id):
+    try:
+        cursor.execute('''UPDATE reservations
+                        SET status = ?
+                        WHERE id = ?
+        ''', ("REJECTED", reservation_id))
+        conn.commit()
+
+        return True
     except Exception as e:
         print("Error Occurred!", e)
         return False
