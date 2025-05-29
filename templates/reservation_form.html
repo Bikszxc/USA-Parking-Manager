@@ -108,6 +108,7 @@
             box-shadow: 0 0 10px rgba(255, 204, 0, 0.5);
         }
 
+        .type-card,
         .vehicle-card {
             background: rgba(255, 255, 255, 0.95);
             border: 3px solid transparent;
@@ -115,12 +116,14 @@
             cursor: pointer;
         }
 
+        .type-card:hover,
         .vehicle-card:hover {
             background: white;
             transform: translateY(-3px);
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
         }
 
+        .type-card.selected,
         .vehicle-card.selected {
             border-color: var(--usa-yellow);
             background: var(--usa-yellow);
@@ -128,6 +131,7 @@
             transform: scale(1.05);
         }
 
+        .type-card.selected .vehicle-icon,
         .vehicle-card.selected .vehicle-icon {
             color: var(--usa-red);
         }
@@ -587,16 +591,59 @@
                             <i class="fas fa-arrow-left mr-2"></i>Back
                         </button>
                         <button type="button" onclick="nextStep()" class="btn-primary text-white py-3 px-6 rounded-xl" disabled id="btn-step-8">
-                            Review<i class="fas fa-arrow-right ml-2"></i>
+                            Next<i class="fas fa-arrow-right ml-2"></i>
                         </button>
                     </div>
                 </div>
 
-                <!-- Step 9: Review -->
                 <div class="step" id="step-9">
                     <div class="mb-8">
                         <div class="flex items-center mb-6">
                             <div class="question-number mr-4">8</div>
+                            <h2 class="question-title text-2xl md:text-3xl font-bold text-white">
+                                What is your affiliation with the school?
+                            </h2>
+                        </div>
+
+                        <div class="type-grid grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                            <div class="type-card p-6 rounded-xl text-center" onclick="selectType('Student')">
+                                <i class="type-icon fas fa-person text-4xl text-gray-700 mb-3"></i>
+                                <p class="font-bold text-gray-800">Student</p>
+                            </div>
+                            <div class="type-card p-6 rounded-xl text-center" onclick="selectType('Staff')">
+                                <i class="type-icon fas fa-user-tie text-4xl text-gray-700 mb-3"></i>
+                                <p class="font-bold text-gray-800">Staff</p>
+                            </div>
+                            <div class="type-card p-6 rounded-xl text-center" onclick="selectType('Alumni')">
+                                <i class="type-icon fas fa-user-graduate text-4xl text-gray-700 mb-3"></i>
+                                <p class="font-bold text-gray-800">Alumni</p>
+                            </div>
+                            <div class="type-card p-6 rounded-xl text-center" onclick="selectType('Visitor')">
+                                <i class="type-icon fas fa-user-secret text-4xl text-gray-700 mb-3"></i>
+                                <p class="font-bold text-gray-800">Visitor</p>
+                            </div>
+                        </div>
+
+                        <input type="hidden" id="ownerType" name="owner_type" required>
+                    </div>
+
+                    <div class="flex justify-between">
+                        <button type="button" onclick="prevStep()" class="btn-secondary py-3 px-6 rounded-xl">
+                            <i class="fas fa-arrow-left mr-2"></i>Back
+                        </button>
+                        <button type="button" onclick="nextStep()" class="btn-primary text-white py-3 px-6 rounded-xl" disabled id="btn-step-9">
+                            Review<i class="fas fa-arrow-right ml-2"></i>
+                        </button>
+                    </div>
+
+
+                </div>
+
+                <!-- Step 10: Review -->
+                <div class="step" id="step-10">
+                    <div class="mb-8">
+                        <div class="flex items-center mb-6">
+                            <div class="question-number mr-4">9</div>
                             <h2 class="question-title text-2xl md:text-3xl font-bold text-white">
                                 Review your reservation
                             </h2>
@@ -632,6 +679,10 @@
                                 <span class="font-semibold text-gray-600">Time:</span>
                                 <span id="reviewTime" class="text-gray-800 font-bold"></span>
                             </div>
+                            <div class="flex justify-between items-center">
+                                <span class="font-semibold text-gray-600">Type:</span>
+                                <span id="reviewType" class="text-gray-800 font-bold"></span>
+                            </div>
                         </div>
 
                     <div class="flex justify-between">
@@ -650,7 +701,7 @@
 
     <script>
         let currentStepNum = 1;
-        let totalSteps = 9;
+        let totalSteps = 10;
         let currentMonth = new Date().getMonth();
         let currentYear = new Date().getFullYear();
         let selectedDate = null;
@@ -676,7 +727,7 @@
                         updateProgress();
                         updateStepCounter();
 
-                        if (currentStepNum === 9) {
+                        if (currentStepNum === 10) {
                             updateReview();
                         }
                     }, 200);
@@ -720,11 +771,13 @@
                 case 5:
                     return document.getElementById('plate').value.trim() !== '';
                 case 6:
-                    return document.getElementById('vehicle').value !== '';
+                    return document.getElementById('vehicle').value.trim() !== '';
                 case 7:
                     return selectedDate !== null;
                 case 8:
                     return selectedTime !== null;
+                case 9:
+                    return document.getElementById('ownerType').value !== '';
                 default:
                     return true;
             }
@@ -839,6 +892,17 @@
             document.getElementById('vehicle').value = type;
 
             const btn = document.getElementById('btn-step-6');
+            btn.disabled = false;
+        }
+
+        function selectType(type) {
+            const cards = document.querySelectorAll('.type-card');
+            cards.forEach(card => card.classList.remove('selected'));
+
+            event.currentTarget.classList.add('selected');
+            document.getElementById('ownerType').value = type
+
+            const btn = document.getElementById('btn-step-9')
             btn.disabled = false;
         }
 
@@ -997,6 +1061,8 @@
             const timeOptions = { hour: 'numeric', minute: '2-digit', hour12: true };
             const timeDate = new Date(`2000-01-01T${selectedTime}:00`);
             document.getElementById('reviewTime').textContent = timeDate.toLocaleTimeString('en-US', timeOptions);
+
+            document.getElementById('reviewType').textContent = document.getElementById('ownerType').value;
         }
 
         function resetForm() {
@@ -1023,6 +1089,9 @@
             // Reset selections
             const cards = document.querySelectorAll('.vehicle-card');
             cards.forEach(card => card.classList.remove('selected'));
+
+            const type_cards = document.querySelectorAll('.type-card');
+            type_cards.forEach(card => card.classList.remove('selected'));
 
             const timeSlots = document.querySelectorAll('.time-slot');
             timeSlots.forEach(slot => slot.classList.remove('selected'));

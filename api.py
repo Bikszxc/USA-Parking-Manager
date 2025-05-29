@@ -11,9 +11,9 @@ def form(request: Request):
     return templates.TemplateResponse("reservation_form.html", {"request": request})
 
 @app.post("/submit", response_class=HTMLResponse)
-def submit(request: Request, name: str = Form(...), email: str = Form(...), contact_number: str = Form(...), plate_number: str = Form(...), vehicle_type: str = Form(...), reservation_date: str = Form(...), reservation_time: str = Form(...)):
+def submit(request: Request, name: str = Form(...), owner_type: str = Form(...), email: str = Form(...), contact_number: str = Form(...), plate_number: str = Form(...), vehicle_type: str = Form(...), reservation_date: str = Form(...), reservation_time: str = Form(...)):
 
-    if create_reservation(name, email, contact_number, plate_number, vehicle_type, reservation_date, reservation_time):
+    if create_reservation(name, owner_type, email, contact_number, plate_number, vehicle_type, reservation_date, reservation_time):
         return templates.TemplateResponse("reservation_form.html", {"request": request, "message": "Submitted successfully!"})
 
     return templates.TemplateResponse("reservation_form.html", {"request": request, "message": "Failed to submit!"})
