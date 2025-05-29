@@ -38,10 +38,11 @@ def clear_past_reservations():
     for res in reservations:
         reservation_date = datetime.strptime(res[7], "%m-%d-%Y")
 
-        if datetime.now() > reservation_date:
+        if datetime.now().date() > reservation_date.date():
             cursor.execute('DELETE FROM reservations WHERE id=?', (res[0],))
 
     connection.commit()
+    connection.close()
 
 def init_db():
     conn = get_connection()
@@ -145,11 +146,11 @@ def init_db():
     ''')
 
     cursor.execute('''
-        CREATE TRIGGER IF NOT EXISTS accept_reservation
+        CREATE TRIGGER IF NOT EXISTS accept_reservations
             AFTER UPDATE OF status
             ON reservations
             FOR EACH ROW
-            WHEN NEW.status = 'ACCEPTED'
+            WHEN NEW.status = 'APPROVED'
         BEGIN
             INSERT INTO accepted_reservations (slot_number, reservation_id)
             VALUES (NEW.assigned_slot, NEW.id);
