@@ -157,6 +157,7 @@ def init_db():
         END
     ''')
 
+
     conn.commit()
     conn.close()
 
