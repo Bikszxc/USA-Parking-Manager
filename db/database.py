@@ -1,5 +1,6 @@
 import sqlite3
 import os
+from datetime import datetime, timezone, timedelta
 
 os.makedirs('./data', exist_ok=True)
 
@@ -27,7 +28,20 @@ def create_parking_slots():
 
     connection.close()
 
+def clear_past_reservations():
+    connection = get_connection()
+    cursor = connection.cursor()
 
+    cursor.execute('SELECT * FROM reservations')
+    reservations = cursor.fetchall()
+
+    for res in reservations:
+        reservation_date = datetime.strptime(res[7], "%m-%d-%Y")
+
+        if datetime.now() > reservation_date:
+            cursor.execute('DELETE FROM reservations WHERE id=?', (res[0],))
+
+    connection.commit()
 
 def init_db():
     conn = get_connection()
@@ -146,3 +160,4 @@ def init_db():
     conn.close()
 
     create_parking_slots()
+    clear_past_reservations()
