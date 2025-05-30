@@ -12,7 +12,7 @@ from logic.models import new_car_owner, get_car_owners, get_owner_vehicles, reco
     park_vehicle, get_parking_slots, unpark_vehicle, get_parkslot_info, assign_vehicle, \
     check_plate_number, get_vehicles, get_vehicle_owner, get_reservations, get_res_id_details, \
     accept_reservation, reject_reservation, update_reservation_late_status, cancel_accepted_reservation, \
-    unassign_vehicle, delete_car_owner, edit_car_owner
+    unassign_vehicle, delete_car_owner, edit_car_owner, delete_reservation
 
 
 class App(tk.Tk):
@@ -921,13 +921,36 @@ class HomePage(tk.Frame):
         self.r_more_info["Assigned Slot"].set(reservation[10])
 
         self.btn_park_reservation = tk.Button(self.btn_frame, text="Park Reservation", bg='#ffcc00', fg="black",
-                                              font=self.master.subheader_font, relief="flat", command=lambda: None)
+                                              font=self.master.subheader_font, relief="flat", command=lambda: self.park_reservation(slot_number))
         self.btn_park_reservation.grid(row=0, column=0, sticky='w')
 
         self.btn_cancel_reservation = tk.Button(self.btn_frame, text="Cancel Reservation", bg='red',
-                                              fg="white", relief="flat", font=self.master.subheader_font, command=lambda: None)
+                                              fg="white", relief="flat", font=self.master.subheader_font, command=lambda: self.cancel_reservation(reservation[0]))
         self.btn_cancel_reservation.grid(row=0, column=1, sticky='e')
 
+    def cancel_reservation(self, reservation_id):
+        try:
+            if messagebox.askquestion("Confirm", "Are you sure you want to cancel the reservation?") == "yes":
+                if cancel_accepted_reservation(reservation_id):
+                    messagebox.showinfo("Success", "Reservation Canceled")
+                    self.window_view_more.destroy()
+                    self.fetch_database(None)
+        except Exception as e:
+            print(f"Fetch Error!", e)
+
+    def park_reservation(self, slot_number):
+        try:
+            reservation = get_res_id_details(slot_number)
+
+            if reservation:
+                if park_vehicle(slot_number, reservation[6], reservation[1], reservation[5], reservation[2], reservation[4]):
+                    messagebox.showinfo("Success", "Reservation Parked")
+                    delete_reservation(reservation[0])
+                    self.window_view_more.destroy()
+                    self.fetch_database(None)
+
+        except Exception as e:
+            print(f"Error! {e}")
 
     def get_slot_info(self, slot_number):
 
@@ -1270,6 +1293,7 @@ class ReservationsPage(tk.Frame):
 
             if accept_reservation(reservation_values[0], slot_number):
                 messagebox.showinfo("Success", f"Reservation {reservation_values[0]} is accepted and assigned to {slot_number}")
+                self.selected_slot.set("None")
                 self.fetch_reservations()
         except Exception as e:
             print(f"Error Occurred!", e)

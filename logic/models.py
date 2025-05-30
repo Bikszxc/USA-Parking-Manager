@@ -175,6 +175,19 @@ def update_reservation_late_status(reservation_id, grace_period_str):
 
 # ================== DELETION =================== #
 
+def delete_reservation(reservation_id):
+    try:
+        cursor.execute('DELETE FROM reservations WHERE id = ?', (reservation_id,))
+
+        if cursor.rowcount == 0:
+            return False
+
+        conn.commit()
+        return True
+    except Exception as e:
+        print("Error Occurred!", e)
+        return False
+
 def delete_car_owner(owner_name) -> bool:
     try:
         cursor.execute('SELECT id FROM car_owners WHERE owner_name = ?', (owner_name,))
