@@ -294,7 +294,6 @@ class DashboardScreen(tk.Frame):
             "Reservations": lambda: self.show_frame(ReservationsPage),
             "Vehicles": lambda: self.show_frame(VehiclesPage),
             "Accounts": lambda: self.show_frame(AccountsPage),
-            "Map": None
         }
 
         for i, (name, page) in enumerate(nav.items(), start=2):
@@ -417,6 +416,7 @@ class HomePage(tk.Frame):
                                               text="View More Details", font=self.master.subheader_font, relief="flat",
                                               padx=5)
         self.btn_reservation_view_more.grid(row=0, column=8, rowspan=2, sticky='nsew')
+        self.btn_reservation_view_more.grid_remove()
 
         for var in self.r_info.values():
             var.set("None")
