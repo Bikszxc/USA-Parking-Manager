@@ -28,6 +28,36 @@ def account_creation(username: str, password: str, admin_name: str, admin_email:
 
     return False
 
+def account_edit(username: str, password: str, admin_name: str, admin_email: str, master_password: str) -> bool:
+    try:
+        if check_master_password(master_password):
+            if password:
+                hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+
+                cursor.execute('''UPDATE admins
+                                SET password_hash = ?,
+                                    admin_name = ?,
+                                    admin_email = ?
+                                WHERE username = ?
+                ''', (hashed_password, admin_name, admin_email, username))
+
+                conn.commit()
+                return True
+            else:
+                cursor.execute('''UPDATE admins
+                                SET admin_name = ?,
+                                    admin_email = ?
+                                WHERE username = ?
+                ''', (admin_name, admin_email, username))
+                conn.commit()
+                return True
+
+        return False
+
+    except Exception as e:
+        print(f"Error occurred during account edit: {e}")
+        return False
+
 def account_deletion(username: str, master_password: str):
     try:
         if check_master_password(master_password):
@@ -38,6 +68,32 @@ def account_deletion(username: str, master_password: str):
         print(f"Error occurred during account deletion: {error}")
 
     return False
+
+def get_admin_details(username):
+    try:
+        cursor.execute('SELECT * FROM admins WHERE username = ?', (username,))
+        admin_details = cursor.fetchone()
+
+        if admin_details:
+            return admin_details
+
+        return None
+    except Exception as error:
+        print(f"Error occurred during get admin: {error}")
+        return None
+
+def get_all_admins():
+    try:
+        cursor.execute("SELECT * FROM admins")
+        admins = cursor.fetchall()
+
+        if admins:
+            return admins
+
+        return []
+    except Exception as error:
+        print(f"Error occurred during get_all_admins(): {error}")
+        return []
 
 def account_login(username: str, password: str) -> bool:
     try:

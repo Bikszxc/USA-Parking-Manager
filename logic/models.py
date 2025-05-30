@@ -100,14 +100,14 @@ def unpark_vehicle(slot) -> bool:
 
 
 # Assign Vehicle to Car Owner
-def assign_vehicle(owner_name, plate_number, vehicle_type, expiration_date) -> bool:
+def assign_vehicle(owner_name, plate_number, vehicle_type) -> bool:
     try:
         cursor.execute("SELECT id FROM car_owners WHERE owner_name= ?", (owner_name,))
         owner_id = cursor.fetchone()
 
         if owner_id:
-            cursor.execute("INSERT INTO registered_cars (owner_id, plate_number, vehicle_type, registration_date, expiration_date) VALUES (?, ?, ?, ?, ?)",
-                           (owner_id[0], plate_number, vehicle_type, ph_time.strftime("%m/%d/%Y"), expiration_date))
+            cursor.execute("INSERT INTO registered_cars (owner_id, plate_number, vehicle_type) VALUES (?, ?, ?)",
+                           (owner_id[0], plate_number, vehicle_type,))
 
             conn.commit()
 
@@ -145,33 +145,62 @@ def reject_reservation(reservation_id):
         print("Error Occurred!", e)
         return False
 
-def renew_vehicle(plate_number, expiration_date) -> bool:
+def cancel_accepted_reservation(reservation_id):
     try:
-        cursor.execute('''UPDATE registered_cars 
-                          SET registration_date = ?,
-                              expiration_date = ?
-                          WHERE plate_number = ?
-        ''', (ph_time.strftime("%m/%d/%Y"),  expiration_date, plate_number))
+        cursor.execute('DELETE FROM accepted_reservations WHERE reservation_id = ?', (reservation_id,))
         conn.commit()
 
         return True
     except Exception as e:
-        print(f"Error Occurred! {e}")
+        print("Error Occurred!", e)
+        return False
+
+
+def update_reservation_late_status(reservation_id, grace_period_str):
+    try:
+        cursor.execute('''UPDATE reservations
+                        SET is_late = ?,
+                            grace_period_until = ?
+                        WHERE id = ?
+        ''', (1, grace_period_str, reservation_id))
+
+        if cursor.rowcount == 0:
+            return False
+
+        conn.commit()
+        return True
+    except Exception as e:
+        print("Error Occurred!", e)
         return False
 
 # ================== DELETION =================== #
 
-# def delete_car_owner(owner_name) -> bool:
-#     try:
-#         pass
-#     except Exception as e:
-#         print("Error Occurred!", e)
+def delete_car_owner(owner_name) -> bool:
+    try:
+        cursor.execute('SELECT id FROM car_owners WHERE owner_name = ?', (owner_name,))
+        owner_id = cursor.fetchone()
 
-# def unassign_vehicle(plate_number, owner_name) -> bool:
-#     try:
-#         pass
-#     except Exception as e:
-#         print("Error Occurred!", e)
+        if owner_id:
+            cursor.execute('DELETE FROM car_owners WHERE id = ?', (owner_id[0],))
+            conn.commit()
+            return True
+
+        return False
+    except Exception as e:
+        print("Error Occurred!", e)
+        return False
+
+def unassign_vehicle(plate_number) -> bool:
+    try:
+        cursor.execute('''DELETE FROM registered_cars WHERE plate_number = ?''', (plate_number,))
+
+        if cursor.rowcount == 0:
+            return False
+        conn.commit()
+        return True
+    except Exception as e:
+        print("Error Occurred!", e)
+        return False
 
 # ==================== FETCHES ===================== #
 
@@ -266,7 +295,7 @@ def get_res_id_details(slot_number):
 
 def get_owner(owner_name: str):
     try:
-        cursor.execute("SELECT id, owner_name, type, contact_number FROM car_owners WHERE owner_name = ? COLLATE NOCASE",
+        cursor.execute("SELECT id, owner_name, type, contact_number, email FROM car_owners WHERE owner_name = ? COLLATE NOCASE",
                        (owner_name,))
         return cursor.fetchone()
     except Exception as e:
@@ -306,7 +335,6 @@ def get_vehicle_type(plate_number):
         print("Error Occurred!", e)
         return None
 
-
 # Fetch all Parking Slots
 def get_parking_slots():
     try:
@@ -324,20 +352,21 @@ def get_parkslot_info(slot_number):
         print(f"Error Occurred!", e)
         return None
 
-def check_registration(plate_number):
+def edit_car_owner(owner_name, owner_type, owner_email, owner_contact):
     try:
-        cursor.execute("SELECT expiration_date FROM registered_cars WHERE plate_number = ?", (plate_number,))
-        dates = cursor.fetchone()
+        cursor.execute('''UPDATE car_owners
+                        SET type = ?,
+                            email = ?,
+                            contact_number = ?
+                        WHERE owner_name = ?
+        ''', (owner_type, owner_email, owner_contact, owner_name))
 
-        if not dates:
-            return True
-
-        expiration_date = datetime.strptime(dates[0], "%m/%d/%Y")
-
-        if ph_time > expiration_date.replace(tzinfo=ph_offset):
+        if cursor.rowcount == 0:
             return False
 
+        conn.commit()
         return True
     except Exception as e:
         print(f"Error Occurred!", e)
-        return None
+        return False
+

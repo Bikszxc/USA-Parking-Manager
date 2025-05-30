@@ -1,17 +1,18 @@
 import re
 import tkinter as tk
 import tkinter.font as tkFont
-from tkcalendar import Calendar, DateEntry
 from tkinter import messagebox, ttk
 from datetime import datetime, timezone, timedelta
 
 from PIL import Image, ImageTk, ImageSequence
 
-from logic.auth import account_login, account_creation
+from logic.auth import account_login, account_creation, account_deletion, get_all_admins, get_admin_details, \
+    account_edit
 from logic.models import new_car_owner, get_car_owners, get_owner_vehicles, record_found, get_owner, get_vehicle_type, \
-    park_vehicle, get_parking_slots, unpark_vehicle, get_parkslot_info, assign_vehicle, check_registration, \
-    renew_vehicle, check_plate_number, get_vehicles, get_vehicle_owner, get_reservations, get_res_id_details, \
-    accept_reservation, reject_reservation
+    park_vehicle, get_parking_slots, unpark_vehicle, get_parkslot_info, assign_vehicle, \
+    check_plate_number, get_vehicles, get_vehicle_owner, get_reservations, get_res_id_details, \
+    accept_reservation, reject_reservation, update_reservation_late_status, cancel_accepted_reservation, \
+    unassign_vehicle, delete_car_owner, edit_car_owner
 
 
 class App(tk.Tk):
@@ -30,7 +31,7 @@ class App(tk.Tk):
         self.grid_rowconfigure(0, weight=1)
         self.grid_columnconfigure(0, weight=1)
 
-        self.show_frame(DashboardScreen)
+        self.show_frame(LoginScreen)
 
     def _initialize_fonts(self):
         font_path = "ui/fonts/Helvetica.ttf"
@@ -251,7 +252,7 @@ class DashboardScreen(tk.Frame):
         self.login_font = tkFont.Font(family=font_path, size=10)
 
     def _initialize_pages(self):
-        for P in (HomePage, ReservationsPage, VehiclesPage):
+        for P in (HomePage, ReservationsPage, VehiclesPage, AccountsPage):
             frame = P(self)
             self.frames[P] = frame
             frame.grid(row=0, column=1, sticky="nsew")
@@ -292,7 +293,7 @@ class DashboardScreen(tk.Frame):
             "Home": lambda: self.show_frame(HomePage),
             "Reservations": lambda: self.show_frame(ReservationsPage),
             "Vehicles": lambda: self.show_frame(VehiclesPage),
-            "Accounts": None,
+            "Accounts": lambda: self.show_frame(AccountsPage),
             "Map": None
         }
 
@@ -616,6 +617,7 @@ class HomePage(tk.Frame):
         """Update only the timer displays without refreshing database"""
         try:
             timer_expired = False
+            reservation_cancelled = False
 
             for slot in self.park_slots:
                 slot_number = slot[1]
@@ -627,17 +629,42 @@ class HomePage(tk.Frame):
 
                 timer_text = None
                 just_expired = False
-                if has_reservation:
-                    timer_result = self.reservation_timer(has_reservation[7], has_reservation[8])
-                    if timer_result:
-                        timer_text, just_expired = timer_result
-                        if just_expired:
-                            timer_expired = True
+                grace_timer_text = None
 
-                should_update = (prev_status != current_status) or timer_text
+                if has_reservation:
+                    # Check if reservation is late and get appropriate timer
+                    if has_reservation[11]:  # is_late is at index 11
+                        grace_result = self.grace_period_timer(has_reservation[12])  # grace_period_until at index 12
+                        if grace_result:
+                            grace_timer_text, grace_expired = grace_result
+                            if grace_expired:
+                                # Grace period expired - cancel the reservation
+                                print(
+                                    f"Grace period expired for reservation {has_reservation[0]} in slot {slot_number}")
+                                if cancel_accepted_reservation(has_reservation[0]):
+                                    print(f"Reservation {has_reservation[0]} cancelled successfully")
+                                    reservation_cancelled = True
+                                else:
+                                    print(f"Failed to cancel reservation {has_reservation[0]}")
+                                timer_expired = True
+                    else:
+                        timer_result = self.reservation_timer(has_reservation[7], has_reservation[8])
+                        if timer_result:
+                            timer_text, just_expired = timer_result
+                            if just_expired:
+                                # Set is_late to True in database
+                                self.set_reservation_late(has_reservation[0])  # Pass reservation ID
+                                timer_expired = True
+
+                should_update = (prev_status != current_status) or timer_text or grace_timer_text
 
                 if should_update:
-                    if timer_text:
+                    if grace_timer_text:
+                        if slot_status == 0:
+                            pkg_text = f"{slot_number}\nAvailable\nGrace period: {grace_timer_text}"
+                        else:
+                            pkg_text = f"{slot_number}\n{slot[5]}\n{slot[3]}\nGrace period: {grace_timer_text}"
+                    elif timer_text:
                         if slot_status == 0:
                             pkg_text = f"{slot_number}\nAvailable\nReservation in: {timer_text}"
                         else:
@@ -649,17 +676,16 @@ class HomePage(tk.Frame):
                         self.park_slot_buttons[slot_number].config(text=pkg_text)
 
             if timer_expired:
-                print("Timer expired - refreshing database")
+                if reservation_cancelled:
+                    print("Reservation cancelled due to grace period expiration - refreshing database")
+                else:
+                    print("Timer expired - refreshing database")
                 self.fetch_database(None)
 
         except Exception as e:
             print(f"Timer update error!", e)
 
     def reservation_timer(self, reservation_date, reservation_time):
-        """
-        Calculate timer if reservation is today and within 1 hour
-        Returns formatted timer string or None
-        """
         try:
             # GMT+8 timezone offset
             ph_offset = timezone(timedelta(hours=8))
@@ -697,6 +723,49 @@ class HomePage(tk.Frame):
             print(f"Timer calculation error: {e}")
             return None
 
+    def grace_period_timer(self, grace_period_until_str):
+        """Handle the 15-minute grace period using the stored end time"""
+        try:
+            if not grace_period_until_str:
+                return None
+
+            # Parse the grace period end time
+            grace_end_time = datetime.strptime(grace_period_until_str, "%m-%d-%Y %H:%M")
+            current_time = datetime.now()
+
+            # Calculate remaining time
+            time_diff = grace_end_time - current_time
+
+            if time_diff.total_seconds() <= 0:
+                return None, True  # Grace period expired
+
+            # Calculate remaining time
+            total_seconds = int(time_diff.total_seconds())
+            minutes = total_seconds // 60
+            seconds = total_seconds % 60
+
+            timer_text = f"{minutes:02d}:{seconds:02d}"
+            grace_expired = total_seconds <= 1
+
+            return timer_text, grace_expired
+
+        except Exception as e:
+            print(f"Grace period timer calculation error: {e}")
+            return None
+
+    def set_reservation_late(self, reservation_id):
+        """Set the is_late flag to True and calculate grace period end time"""
+        try:
+            # Calculate grace period end time (15 minutes from now)
+            grace_end_time = datetime.now() + timedelta(minutes=16)
+            grace_end_str = grace_end_time.strftime("%m-%d-%Y %H:%M")
+
+            # Update database with is_late=True and grace_period_until
+            update_reservation_late_status(reservation_id, grace_end_str)
+            print(f"Reservation {reservation_id} marked as late with grace period until {grace_end_str}")
+        except Exception as e:
+            print(f"Error setting reservation late status: {e}")
+
     def fetch_database(self, event):
         try:
             self.car_owners = sorted([name[1] for name in get_car_owners()])
@@ -719,6 +788,7 @@ class HomePage(tk.Frame):
                 current_status = (slot_status, has_reservation)
 
                 timer_text = None
+                grace_timer_text = None
                 just_expired = False
 
                 upcoming_reservation = False
@@ -743,8 +813,11 @@ class HomePage(tk.Frame):
                 fgcolor = "white"
                 bgcolor = "green"  # Default color
 
-                # Always set the color based on current conditions, not just when status changes
-                if upcoming_reservation and slot_status == 1:
+                # Handle colors for different states including grace period
+                if has_reservation and has_reservation[11]:  # is_late is True (index 11)
+                    bgcolor = "orange"  # Grace period color
+                    fgcolor = "black"
+                elif upcoming_reservation and slot_status == 1:
                     bgcolor = "blue"
                 elif upcoming_reservation and slot_status == 0:
                     bgcolor = "yellow"
@@ -755,13 +828,35 @@ class HomePage(tk.Frame):
                     bgcolor = "green"
 
                 if has_reservation:
-                    timer_result = self.reservation_timer(has_reservation[7], has_reservation[8])
-                    if timer_result:
-                        timer_text, just_expired = timer_result
-                        if just_expired:
-                            timer_expired = True
+                    if has_reservation[11]:  # is_late is True - show grace period timer (index 11)
+                        grace_result = self.grace_period_timer(has_reservation[12])  # grace_period_until at index 12
+                        if grace_result:
+                            grace_timer_text, grace_expired = grace_result
+                            if grace_expired:
+                                # Grace period expired - cancel the reservation
+                                print(
+                                    f"Grace period expired for reservation {has_reservation[0]} in slot {slot_number}")
+                                if cancel_accepted_reservation(has_reservation[0]):
+                                    print(f"Reservation {has_reservation[0]} cancelled successfully")
+                                else:
+                                    print(f"Failed to cancel reservation {has_reservation[0]}")
+                                timer_expired = True
+                    else:  # Normal reservation timer
+                        timer_result = self.reservation_timer(has_reservation[7], has_reservation[8])
+                        if timer_result:
+                            timer_text, just_expired = timer_result
+                            if just_expired:
+                                # Set is_late to True
+                                self.set_reservation_late(has_reservation[0])
+                                timer_expired = True
 
-                if timer_text and not timer_expired:
+                # Display appropriate text based on timer state
+                if grace_timer_text:
+                    if slot_status == 0:
+                        pkg_text = f"{slot_number}\nAvailable\nGrace period: {grace_timer_text}"
+                    else:
+                        pkg_text = f"{slot_number}\n{slot[5]}\n{slot[3]}\nGrace period: {grace_timer_text}"
+                elif timer_text and not timer_expired:
                     if slot_status == 0:
                         pkg_text = f"{slot_number}\nAvailable\nReservation in: {timer_text}"
                     else:
@@ -910,9 +1005,6 @@ class HomePage(tk.Frame):
 
             if not is_valid_plate_number(plate_number):
                 raise Exception("Invalid plate number!", messagebox.showerror("Error", "Invalid Plate Number"))
-
-            if not check_registration(plate_number):
-                raise Exception(messagebox.showerror("Error", "Vehicle Pass is Expired!"))
 
             if not slot_number in self.slot_numbers:
                 raise Exception(messagebox.showerror("Error", "Slot number must be in parking slots!"))
@@ -1283,14 +1375,645 @@ class ReservationsPage(tk.Frame):
         except Exception as e:
             print(f"Error fetching reservations: {e}")
 
+
 class VehiclesPage(tk.Frame):
     def __init__(self, master):
         super().__init__(master, bg="#e6e6e6", padx=10, pady=10)
 
-        self._test_label()
+        self.refresh_data()
 
-    def _test_label(self):
-        tk.Label(self, text="This is a test!", bg='#e6e6e6', fg="black", font=("Arial", 24, "bold")).pack(expand=True, fill='both')
+        self._initialize_inner_frames()
+
+        self.frames = {
+            "Assign Vehicle": self.frame_assign_vehicle,
+            "Unassign Vehicle": self.frame_unassign_vehicle
+        }
+
+        self.grid_rowconfigure(0, weight=1)
+        self.grid_columnconfigure(0, weight=1)
+
+        self._initialize_frame_titles()
+        self._initialize_grid()
+        self._initialize_styles()
+        self._create_assign_vehicle_labels()
+        self._create_assign_vehicle_entries()
+        self._create_unassign_vehicle_labels()
+        self._create_unassign_vehicle_entries()
+        self._assign_spacer_and_underline()
+        self._create_submit_buttons()
+        self._create_binds()
+
+    def refresh_data(self):
+        self.fetch_database()
+
+    def _initialize_inner_frames(self):
+        self.frame_assign_vehicle = tk.Frame(self, bg='#b80000', padx=10, pady=10)
+        self.frame_unassign_vehicle = tk.Frame(self, bg='#b80000', padx=10, pady=10)
+
+    def _initialize_frame_titles(self):
+        for (title, f) in self.frames.items():
+            tk.Frame(f, bg='#b80000', height=50).grid(row=0, column=0, sticky='w')
+            tk.Label(f, text=title, bg='#b80000', fg="white",
+                     font=self.master.header_font).place(x=0, y=0)
+
+    def _initialize_grid(self):
+        self.frames["Assign Vehicle"].grid(row=0, column=0, sticky='new')
+        self.frames["Unassign Vehicle"].grid(row=0, column=2, sticky='new')
+
+    def _initialize_styles(self):
+        combobox_style = ttk.Style()
+        combobox_style.theme_use('default')
+        combobox_style.configure("CustomCombobox.TCombobox", fieldbackground="#b80000", foreground="#ffffff",
+                                 relief="flat", borderwidth=0, highlightcolor="#b80000")
+        combobox_style.map("CustomCombobox.TCombobox", selectbackground=[('!disabled', "#e6e6e6")],
+                           selectforeground=[('!disabled', "black")])
+
+    def _create_assign_vehicle_labels(self):
+        labels = ["Owner Name", "Plate Number", "Vehicle Type"]
+
+        i = 1
+        for label in labels:
+            tk.Label(self.frame_assign_vehicle, text=label, bg='#b80000', fg='white',
+                     font=self.master.subheader_font).grid(row=i, column=0, sticky='w')
+            i += 4
+
+    def _create_assign_vehicle_entries(self):
+        # Owner Name combobox
+        self.dropdown_assign_owner = ttk.Combobox(self.frame_assign_vehicle, values=self.car_owners, state="normal",
+                                                  style="CustomCombobox.TCombobox")
+        self.dropdown_assign_owner.grid(row=3, column=0, sticky='nsew')
+
+        # Plate Number entry
+        self.entry_assign_plate = tk.Entry(self.frame_assign_vehicle, bg='#b80000', fg="white", relief="flat")
+        self.entry_assign_plate.grid(row=7, column=0, sticky='nsew')
+
+        # Vehicle Type entry
+        self.entry_assign_vehicle_type = tk.Entry(self.frame_assign_vehicle, bg='#b80000', fg="white", relief="flat")
+        self.entry_assign_vehicle_type.grid(row=11, column=0, sticky='nsew')
+
+    def _create_unassign_vehicle_labels(self):
+        labels = ["Owner Name", "Plate Number"]
+
+        i = 1
+        for label in labels:
+            tk.Label(self.frame_unassign_vehicle, text=label, bg='#b80000', fg='white',
+                     font=self.master.subheader_font).grid(row=i, column=0, sticky='w')
+            i += 4
+
+    def _create_unassign_vehicle_entries(self):
+        # Owner Name combobox
+        self.dropdown_unassign_owner = ttk.Combobox(self.frame_unassign_vehicle, values=self.car_owners, state="normal",
+                                                    style="CustomCombobox.TCombobox")
+        self.dropdown_unassign_owner.grid(row=3, column=0, sticky='nsew')
+
+        # Plate Number combobox
+        self.dropdown_unassign_plate = ttk.Combobox(self.frame_unassign_vehicle, values=[], state="normal",
+                                                    style="CustomCombobox.TCombobox")
+        self.dropdown_unassign_plate.grid(row=7, column=0, sticky='nsew')
+
+    def _create_submit_buttons(self):
+        # Assign Vehicle button
+        self.assign_button = tk.Button(self.frame_assign_vehicle, text="Assign Vehicle", bg='#ffcc00', fg='black',
+                                       relief="flat", command=self.submit_assign, font=self.master.subheader_font)
+        self.assign_button.grid(row=14, column=0, sticky='nsew')
+
+        # Unassign Vehicle button
+        self.unassign_button = tk.Button(self.frame_unassign_vehicle, text="Unassign Vehicle", bg='#ffcc00', fg='black',
+                                         relief="flat", command=self.submit_unassign, font=self.master.subheader_font)
+        self.unassign_button.grid(row=10, column=0, sticky='nsew')
+
+    def _create_binds(self):
+        self.dropdown_unassign_owner.bind("<<ComboboxSelected>>", self.filter_owner_vehicles)
+        self.dropdown_unassign_owner.bind("<Return>", self.filter_owner_vehicles)
+
+    def _assign_spacer_and_underline(self):
+        # Assign vehicle frame spacing
+        i = 3
+        while i <= 12:
+            tk.Canvas(self.frame_assign_vehicle, bg="white", height=0,
+                      width=200, highlightthickness=0).grid(row=i, column=0, sticky='sew')
+            tk.Frame(self.frame_assign_vehicle, bg='#b80000', height=15).grid(row=i + 1, column=0, sticky='nsew')
+            i += 4
+
+        tk.Frame(self.frame_assign_vehicle, bg='#b80000', height=10).grid(row=13, column=0, sticky='nsew')
+        self.frame_assign_vehicle.columnconfigure(0, weight=2)
+
+        # Unassign vehicle frame spacing
+        i = 3
+        while i <= 8:
+            tk.Canvas(self.frame_unassign_vehicle, bg="white", height=0,
+                      width=200, highlightthickness=0).grid(row=i, column=0, sticky='sew')
+            tk.Frame(self.frame_unassign_vehicle, bg='#b80000', height=15).grid(row=i + 1, column=0, sticky='nsew')
+            i += 4
+
+        tk.Frame(self.frame_unassign_vehicle, bg='#b80000', height=10).grid(row=9, column=0, sticky='nsew')
+        self.frame_unassign_vehicle.columnconfigure(0, weight=2)
+
+        # Main grid configuration
+        tk.Frame(self, bg='#e6e6e6', width=15).grid(row=0, column=1, sticky='n')
+
+        self.grid_columnconfigure(0, weight=1)
+        self.grid_columnconfigure(1, weight=0)
+        self.grid_columnconfigure(2, weight=1)
+        self.grid_rowconfigure(0, weight=1)
+
+    def fetch_database(self):
+        try:
+            self.car_owners = sorted([name[1] for name in get_car_owners()])
+        except Exception as e:
+            print(f"Error: {e}")
+
+    def filter_owner_vehicles(self, event):
+        owner_name = self.dropdown_unassign_owner.get()
+
+        self.dropdown_unassign_plate.config(values=sorted([plate[2] for plate in get_owner_vehicles(owner_name)]))
+
+    def submit_assign(self):
+        try:
+            owner_name = self.dropdown_assign_owner.get()
+            plate_number = self.entry_assign_plate.get()
+            vehicle_type = self.entry_assign_vehicle_type.get()
+
+            if not all([owner_name, plate_number, vehicle_type]):
+                messagebox.showerror("Error", "You need to fill out all details")
+
+            if assign_vehicle(owner_name, plate_number, vehicle_type):
+                messagebox.showinfo("Success", f"Vehicle {plate_number} \nhas been assigned to {owner_name}")
+                self.dropdown_assign_owner.delete(0, 'end')
+                self.entry_assign_plate.delete(0, 'end')
+                self.entry_assign_vehicle_type.delete(0, 'end')
+
+        except Exception as e:
+            print(f"Error: {e}")
+
+    def submit_unassign(self):
+        try:
+            owner_name = self.dropdown_unassign_owner.get()
+            plate_number = self.dropdown_unassign_plate.get()
+
+            if not all([owner_name, plate_number]):
+                raise Exception(messagebox.showerror("Error", "You must select at least one owner and plate number."))
+
+            if unassign_vehicle(plate_number):
+                messagebox.showinfo("Success", f"Vehicle {plate_number}\nhas been unassigned.")
+                self.dropdown_unassign_plate.delete(0, tk.END)
+                self.dropdown_unassign_owner.delete(0, tk.END)
+
+        except Exception as e:
+            print(f"Error: {e}")
+
+
+class AccountsPage(tk.Frame):
+    def __init__(self, master):
+        super().__init__(master, bg="#e6e6e6", padx=10, pady=10)
+
+        self._initialize_inner_frames()
+
+        self.frames = {
+            "New Car Owner": self.frame_new_car_owner,
+            "Edit Car Owner": self.frame_edit_car_owner,
+            "New Admin": self.frame_new_admin,
+            "Edit Admin": self.frame_edit_admin
+        }
+
+        self.grid_rowconfigure(0, weight=1)
+        self.grid_rowconfigure(2, weight=1)
+        self.grid_columnconfigure(0, weight=1)
+        self.grid_columnconfigure(1, weight=1)
+
+        self._initialize_frame_titles()
+        self._initialize_grid()
+        self._initialize_styles()
+        self._create_new_car_owner_labels()
+        self._create_new_car_owner_entries()
+        self._create_edit_car_owner_labels()
+        self._create_edit_car_owner_entries()
+        self._create_new_admin_labels()
+        self._create_new_admin_entries()
+        self._create_edit_admin_labels()
+        self._create_edit_admin_entries()
+        self._accounts_spacer_and_underline()
+        self._create_submit_buttons()
+        self._create_binds()
+
+        self.refresh_data()
+
+    def refresh_data(self):
+        # Initialize placeholder data - you can replace with actual functions
+        self.car_owners = sorted([name[1] for name in get_car_owners()])
+        self.dropdown_edit_name.config(values=self.car_owners)
+
+        self.admins = sorted([username[1] for username in get_all_admins()])
+        self.dropdown_edit_username.config(values=self.admins)
+
+    def _initialize_inner_frames(self):
+        self.frame_new_car_owner = tk.Frame(self, bg='#b80000', padx=10, pady=10)
+        self.frame_edit_car_owner = tk.Frame(self, bg='#b80000', padx=10, pady=10)
+        self.frame_new_admin = tk.Frame(self, bg='#b80000', padx=10, pady=10)
+        self.frame_edit_admin = tk.Frame(self, bg='#b80000', padx=10, pady=10)
+
+    def _initialize_frame_titles(self):
+        for (title, f) in self.frames.items():
+            tk.Frame(f, bg='#b80000', height=50).grid(row=0, column=0, sticky='w')
+            tk.Label(f, text=title, bg='#b80000', fg="white",
+                     font=self.master.header_font).place(x=0, y=0)
+
+    def _initialize_grid(self):
+        self.frames["New Car Owner"].grid(row=0, column=0, sticky='nsew')
+        self.frames["Edit Car Owner"].grid(row=0, column=1, sticky='nsew')
+        self.frames["New Admin"].grid(row=2, column=0, sticky='nsew')
+        self.frames["Edit Admin"].grid(row=2, column=1, sticky='nsew')
+
+    def _initialize_styles(self):
+        combobox_style = ttk.Style()
+        combobox_style.theme_use('default')
+
+        # Configure the base style for readonly combobox
+        combobox_style.configure("CustomCombobox.TCombobox",
+                                 fieldbackground="#b80000",
+                                 foreground="#ffffff",
+                                 relief="flat",
+                                 borderwidth=0,
+                                 insertcolor="#ffffff",  # cursor color
+                                 arrowcolor="#ffffff")  # dropdown arrow color
+
+        # Map different states for proper readonly behavior
+        combobox_style.map("CustomCombobox.TCombobox",
+                           # Background colors for different states
+                           fieldbackground=[('readonly', '#b80000'),
+                                            ('disabled', '#808080'),
+                                            ('active', '#c91010')],  # slightly lighter on hover
+
+                           # Foreground colors for different states
+                           foreground=[('readonly', '#ffffff'),
+                                       ('disabled', '#cccccc'),
+                                       ('active', '#ffffff')],
+
+                           # Selection colors (for the dropdown list)
+                           selectbackground=[('readonly', '#e6e6e6'),
+                                             ('!disabled', '#e6e6e6')],
+                           selectforeground=[('readonly', 'black'),
+                                             ('!disabled', 'black')],
+
+                           # Arrow color for different states
+                           arrowcolor=[('readonly', '#ffffff'),
+                                       ('disabled', '#cccccc'),
+                                       ('active', '#ffffff')],
+
+                           # Border/focus ring
+                           focuscolor=[('readonly', '#b80000'),
+                                       ('!disabled', '#b80000')])
+
+    def _create_new_car_owner_labels(self):
+        labels = ["Name", "Owner Type", "Email Address", "Contact Number"]
+
+        for i, label in enumerate(labels, start=1):
+            tk.Label(self.frame_new_car_owner, text=label, bg='#b80000', fg='white',
+                     font=self.master.subheader_font).grid(row=i * 4 - 3, column=0, sticky='w')
+
+    def _create_new_car_owner_entries(self):
+        self.entry_new_name = tk.Entry(self.frame_new_car_owner, bg='#b80000', fg="white", relief="flat")
+        self.entry_new_name.grid(row=2, column=0, sticky='nsew')
+
+        self.dropdown_new_owner_type = ttk.Combobox(self.frame_new_car_owner,
+                                                    values=["Student", "Staff", "Alumni", "Visitor"],
+                                                    state="readonly", style="CustomCombobox.TCombobox")
+        self.dropdown_new_owner_type.grid(row=6, column=0, sticky='nsew')
+
+        self.entry_new_email = tk.Entry(self.frame_new_car_owner, bg='#b80000', fg="white", relief="flat")
+        self.entry_new_email.grid(row=10, column=0, sticky='nsew')
+
+        self.entry_new_contact = tk.Entry(self.frame_new_car_owner, bg='#b80000', fg="white", relief="flat")
+        self.entry_new_contact.grid(row=14, column=0, sticky='nsew')
+
+    def _create_edit_car_owner_labels(self):
+        labels = ["Name", "Owner Type", "Email Address", "Contact Number"]
+
+        for i, label in enumerate(labels, start=1):
+            tk.Label(self.frame_edit_car_owner, text=label, bg='#b80000', fg='white',
+                     font=self.master.subheader_font).grid(row=i * 4 - 3, column=0, columnspan=2, sticky='w')
+
+    def _create_edit_car_owner_entries(self):
+        self.dropdown_edit_name = ttk.Combobox(self.frame_edit_car_owner, values=[],
+                                               state="readonly", style="CustomCombobox.TCombobox")
+        self.dropdown_edit_name.grid(row=2, column=0, columnspan=2, sticky='nsew')
+
+        self.dropdown_edit_owner_type = ttk.Combobox(self.frame_edit_car_owner,
+                                                     values=["Student", "Staff", "Alumni", "Visitor"],
+                                                     state="readonly", style="CustomCombobox.TCombobox")
+        self.dropdown_edit_owner_type.grid(row=6, column=0, columnspan=2, sticky='nsew')
+
+        self.entry_edit_email = tk.Entry(self.frame_edit_car_owner, bg='#b80000', fg="white", relief="flat")
+        self.entry_edit_email.grid(row=10, column=0, columnspan=2, sticky='nsew')
+
+        self.entry_edit_contact = tk.Entry(self.frame_edit_car_owner, bg='#b80000', fg="white", relief="flat")
+        self.entry_edit_contact.grid(row=14, column=0, columnspan=2, sticky='nsew')
+
+    def _create_new_admin_labels(self):
+        labels = ["Username", "Password", "Admin Name", "Admin Email", "Master Password"]
+
+        for i, label in enumerate(labels, start=1):
+            tk.Label(self.frame_new_admin, text=label, bg='#b80000', fg='white',
+                     font=self.master.subheader_font).grid(row=i * 4 - 3, column=0, sticky='w')
+
+    def _create_new_admin_entries(self):
+        self.entry_new_username = tk.Entry(self.frame_new_admin, bg='#b80000', fg="white", relief="flat")
+        self.entry_new_username.grid(row=2, column=0, sticky='nsew')
+
+        self.entry_new_password = tk.Entry(self.frame_new_admin, bg='#b80000', fg="white", relief="flat", show="*")
+        self.entry_new_password.grid(row=6, column=0, sticky='nsew')
+
+        self.entry_new_admin_name = tk.Entry(self.frame_new_admin, bg='#b80000', fg="white", relief="flat")
+        self.entry_new_admin_name.grid(row=10, column=0, sticky='nsew')
+
+        self.entry_new_admin_email = tk.Entry(self.frame_new_admin, bg='#b80000', fg="white", relief="flat")
+        self.entry_new_admin_email.grid(row=14, column=0, sticky='nsew')
+
+        self.entry_new_master_password = tk.Entry(self.frame_new_admin, bg='#b80000', fg="white", relief="flat",
+                                                  show="*")
+        self.entry_new_master_password.grid(row=18, column=0, sticky='nsew')
+
+    def _create_edit_admin_labels(self):
+        labels = ["Username", "Password", "Admin Name", "Admin Email", "Master Password"]
+
+        for i, label in enumerate(labels, start=1):
+            tk.Label(self.frame_edit_admin, text=label, bg='#b80000', fg='white',
+                     font=self.master.subheader_font).grid(row=i * 4 - 3, column=0, columnspan=2, sticky='w')
+
+    def _create_edit_admin_entries(self):
+        self.dropdown_edit_username = ttk.Combobox(self.frame_edit_admin, values=[],
+                                                   state="readonly", style="CustomCombobox.TCombobox")
+        self.dropdown_edit_username.grid(row=2, column=0, columnspan=2, sticky='nsew')
+
+        self.entry_edit_password = tk.Entry(self.frame_edit_admin, bg='#b80000', fg="white", relief="flat", show="*")
+        self.entry_edit_password.grid(row=6, column=0, columnspan=2, sticky='nsew')
+
+        self.entry_edit_admin_name = tk.Entry(self.frame_edit_admin, bg='#b80000', fg="white", relief="flat")
+        self.entry_edit_admin_name.grid(row=10, column=0, columnspan=2, sticky='nsew')
+
+        self.entry_edit_admin_email = tk.Entry(self.frame_edit_admin, bg='#b80000', fg="white", relief="flat")
+        self.entry_edit_admin_email.grid(row=14, column=0, columnspan=2, sticky='nsew')
+
+        self.entry_edit_master_password = tk.Entry(self.frame_edit_admin, bg='#b80000', fg="white", relief="flat",
+                                                   show="*")
+        self.entry_edit_master_password.grid(row=18, column=0, columnspan=2, sticky='nsew')
+
+    def _create_submit_buttons(self):
+        # New Car Owner Submit Button
+        self.btn_new_car_owner_submit = tk.Button(self.frame_new_car_owner, text="Submit", bg='#ffcc00', fg='black',
+                                                  relief="flat", command=self.submit_new_car_owner,
+                                                  font=self.master.subheader_font)
+        self.btn_new_car_owner_submit.grid(row=16, column=0, sticky='nsew')
+
+        # Edit Car Owner Buttons
+        self.btn_edit_car_owner_delete = tk.Button(self.frame_edit_car_owner, text="Delete", bg='red', fg='white',
+                                                   relief="flat", command=self.delete_car_owner,
+                                                   font=self.master.subheader_font)
+        self.btn_edit_car_owner_delete.grid(row=16, column=0, sticky='ew')
+
+        self.btn_edit_car_owner_confirm = tk.Button(self.frame_edit_car_owner, text="Confirm Edit", bg='#ffcc00',
+                                                    fg='black',
+                                                    relief="flat", command=self.confirm_edit_car_owner,
+                                                    font=self.master.subheader_font)
+        self.btn_edit_car_owner_confirm.grid(row=16, column=1, sticky='ew')
+
+        # New Admin Submit Button
+        self.btn_new_admin_submit = tk.Button(self.frame_new_admin, text="Submit", bg='#ffcc00', fg='black',
+                                              relief="flat", command=self.submit_new_admin,
+                                              font=self.master.subheader_font)
+        self.btn_new_admin_submit.grid(row=20, column=0, sticky='nsew')
+
+        # Edit Admin Buttons
+        self.btn_edit_admin_delete = tk.Button(self.frame_edit_admin, text="Delete Admin", bg='red', fg='white',
+                                               relief="flat", command=self.delete_admin,
+                                               font=self.master.subheader_font)
+        self.btn_edit_admin_delete.grid(row=20, column=0, sticky='ew')
+
+        self.btn_edit_admin_confirm = tk.Button(self.frame_edit_admin, text="Confirm Edit", bg='#ffcc00', fg='black',
+                                                relief="flat", command=self.confirm_edit_admin,
+                                                font=self.master.subheader_font)
+        self.btn_edit_admin_confirm.grid(row=20, column=1, sticky='ew')
+
+    def _create_binds(self):
+        # Add any bindings here if needed
+        self.dropdown_edit_name.bind("<<ComboboxSelected>>", self.edit_owner_selected)
+        self.dropdown_edit_username.bind("<<ComboboxSelected>>", self.edit_admin_selected)
+
+    def _accounts_spacer_and_underline(self):
+        # New Car Owner frame spacing
+        for i in [2, 6, 10, 14]:
+            tk.Canvas(self.frame_new_car_owner, bg="white", height=0,
+                      width=200, highlightthickness=0).grid(row=i, column=0, sticky='sew')
+            tk.Frame(self.frame_new_car_owner, bg='#b80000', height=15).grid(row=i + 1, column=0, sticky='nsew')
+
+        tk.Frame(self.frame_new_car_owner, bg='#b80000', height=10).grid(row=15, column=0, sticky='nsew')
+        self.frame_new_car_owner.columnconfigure(0, weight=1)
+
+        # Edit Car Owner frame spacing
+        for i in [2, 6, 10, 14]:
+            tk.Canvas(self.frame_edit_car_owner, bg="white", height=0,
+                      width=200, highlightthickness=0).grid(row=i, column=0, columnspan=2, sticky='sew')
+            tk.Frame(self.frame_edit_car_owner, bg='#b80000', height=15).grid(row=i + 1, column=0, columnspan=2,
+                                                                              sticky='nsew')
+
+        tk.Frame(self.frame_edit_car_owner, bg='#b80000', height=10).grid(row=15, column=0, columnspan=2, sticky='nsew')
+        self.frame_edit_car_owner.columnconfigure(0, weight=1)
+        self.frame_edit_car_owner.columnconfigure(1, weight=1)
+
+        # New Admin frame spacing
+        for i in [2, 6, 10, 14, 18]:
+            tk.Canvas(self.frame_new_admin, bg="white", height=0,
+                      width=200, highlightthickness=0).grid(row=i, column=0, sticky='sew')
+            tk.Frame(self.frame_new_admin, bg='#b80000', height=15).grid(row=i + 1, column=0, sticky='nsew')
+
+        tk.Frame(self.frame_new_admin, bg='#b80000', height=10).grid(row=19, column=0, sticky='nsew')
+        self.frame_new_admin.columnconfigure(0, weight=1)
+
+        # Edit Admin frame spacing
+        for i in [2, 6, 10, 14, 18]:
+            tk.Canvas(self.frame_edit_admin, bg="white", height=0,
+                      width=200, highlightthickness=0).grid(row=i, column=0, columnspan=2, sticky='sew')
+            tk.Frame(self.frame_edit_admin, bg='#b80000', height=15).grid(row=i + 1, column=0, columnspan=2,
+                                                                          sticky='nsew')
+
+        tk.Frame(self.frame_edit_admin, bg='#b80000', height=10).grid(row=19, column=0, columnspan=2, sticky='nsew')
+        self.frame_edit_admin.columnconfigure(0, weight=1)
+        self.frame_edit_admin.columnconfigure(1, weight=1)
+
+        # Main spacer between rows 0 and 2
+        tk.Frame(self, bg='#e6e6e6', height=15).grid(row=1, column=0, columnspan=2, sticky='ew')
+
+    # Button functions - all set to pass as requested
+    def submit_new_car_owner(self):
+        try:
+            owner_name = self.entry_new_name.get()
+            owner_type = self.dropdown_new_owner_type.get()
+            owner_email = self.entry_new_email.get()
+            owner_number = self.entry_new_contact.get()
+
+            if not all([owner_name, owner_type, owner_email, owner_number]):
+                raise Exception(messagebox.showerror("Error", "Please enter all fields before submitting a new car owner"))
+
+            if not is_valid_email(owner_email):
+                raise Exception(messagebox.showerror("Error", "Please enter a valid email address"))
+
+            if new_car_owner(owner_name, owner_email, owner_type, owner_number):
+                messagebox.showinfo("Success", "New car owner successfully submitted")
+                for e in (self.entry_new_name, self.entry_new_email, self.entry_new_contact):
+                    e.delete(0, tk.END)
+                self.dropdown_new_owner_type.set("")
+                self.refresh_data()
+        except Exception as e:
+            print(f"Error: {e}")
+
+    def edit_owner_selected(self, event=None):
+        try:
+            self.dropdown_edit_owner_type.set("")
+            self.entry_edit_email.delete(0, tk.END)
+            self.entry_edit_contact.delete(0, tk.END)
+
+            owner_name = self.dropdown_edit_name.get()
+
+            owner_details = get_owner(owner_name)
+
+            if owner_details:
+                self.dropdown_edit_name.configure(state="readonly")
+                self.entry_edit_email.configure(state="normal")
+                self.entry_edit_contact.configure(state="normal")
+
+                self.dropdown_edit_owner_type.set(owner_details[2])
+                self.entry_edit_email.insert(0, owner_details[4])
+                self.entry_edit_contact.insert(0, owner_details[3])
+        except Exception as e:
+            print(f"Error: {e}")
+
+    def delete_car_owner(self):
+        try:
+            owner_name = self.dropdown_edit_name.get()
+
+            if not owner_name:
+                raise Exception(messagebox.showerror("Error", "Please select a car owner"))
+
+            if messagebox.askquestion("Delete car owner", "Are you sure you want to delete the car owner?") == "yes":
+                if delete_car_owner(owner_name):
+                    messagebox.showinfo("Success", "Car owner successfully deleted")
+                    self.dropdown_edit_name.set("")
+                    self.dropdown_edit_owner_type.set("")
+                    self.entry_edit_email.delete(0, tk.END)
+                    self.entry_edit_contact.delete(0, tk.END)
+                    self.refresh_data()
+            else:
+                return
+        except Exception as e:
+            print(f"Error: {e}")
+
+    def confirm_edit_car_owner(self):
+        try:
+            owner_name = self.dropdown_edit_name.get()
+            owner_type = self.dropdown_edit_owner_type.get()
+            owner_email = self.entry_edit_email.get()
+            owner_contact = self.entry_edit_contact.get()
+
+            if not all([owner_name, owner_type, owner_email, owner_contact]):
+                raise Exception(messagebox.showerror("Error", "Please enter all fields before editing a car owner"))
+
+            if not is_valid_email(owner_email):
+                raise Exception(messagebox.showerror("Error", "Please enter a valid email address"))
+
+            if edit_car_owner(owner_name, owner_type, owner_email, owner_contact):
+                messagebox.showinfo("Success", "Car owner successfully edited")
+                self.dropdown_edit_name.set("")
+                self.dropdown_edit_owner_type.set("")
+                self.entry_edit_email.delete(0, tk.END)
+                self.entry_edit_contact.delete(0, tk.END)
+                self.refresh_data()
+
+        except Exception as e:
+            print(f"Error: {e}")
+
+    def submit_new_admin(self):
+        try:
+            username = self.entry_new_username.get()
+            password = self.entry_new_password.get()
+            admin_name = self.entry_new_admin_name.get()
+            admin_email = self.entry_new_admin_email.get()
+            master_password = self.entry_new_master_password.get()
+
+            if not all([username, password, admin_name, admin_email, master_password]):
+                raise Exception(messagebox.showerror("Error", "Please enter all fields before submitting a new admin"))
+
+            if account_creation(username, password, admin_name, admin_email, master_password):
+                messagebox.showinfo("Success", "New admin account successfully created")
+                for e in (self.entry_new_username, self.entry_new_password, self.entry_new_admin_name, self.entry_new_admin_email, self.entry_new_master_password):
+                    e.delete(0, tk.END)
+                self.refresh_data()
+            else:
+                messagebox.showerror("Error", "Username already exists or incorrect master password")
+        except Exception as e:
+            print(f"Error: {e}")
+
+    def delete_admin(self):
+        try:
+            username = self.dropdown_edit_username.get()
+            master_password = self.entry_edit_master_password.get()
+
+            if not all([username, master_password]):
+                raise Exception(messagebox.showerror("Error", "Please select admin and enter master password"))
+
+            if account_deletion(username, master_password):
+                messagebox.showinfo("Success", "Admin account successfully deleted")
+                self.dropdown_edit_username.set("")
+                self.entry_edit_master_password.delete(0, tk.END)
+                self.refresh_data()
+            else:
+                messagebox.showerror("Error", "Incorrect master password")
+        except Exception as e:
+            print(f"Error: {e}")
+
+    def edit_admin_selected(self, event=None):
+        try:
+            self.entry_edit_password.delete(0, tk.END)
+            self.entry_edit_email.delete(0, tk.END)
+            self.entry_edit_admin_name.delete(0, tk.END)
+
+            username = self.dropdown_edit_username.get()
+
+            admin_details = get_admin_details(username)
+
+            if admin_details:
+                self.entry_edit_admin_name.insert(0, admin_details[3])
+                self.entry_edit_admin_email.insert(0, admin_details[4])
+
+        except Exception as e:
+            print(f"Error: {e}")
+
+    def confirm_edit_admin(self):
+        try:
+            username = self.dropdown_edit_username.get()
+            admin_name = self.entry_edit_admin_name.get()
+            admin_email = self.entry_edit_admin_email.get()
+            master_password = self.entry_edit_master_password.get()
+
+            password = self.entry_edit_password.get().strip()
+
+            if not all([username, admin_name, admin_email, master_password]):
+                raise Exception(messagebox.showerror("Error", "Please enter all fields before editing an admin"))
+
+            if password == "":
+                password = None
+
+            if account_edit(username, password, admin_name, admin_email, master_password):
+                messagebox.showinfo("Success", "Admin account successfully edited")
+                self.dropdown_edit_username.set("")
+                self.entry_edit_master_password.delete(0, tk.END)
+                self.entry_edit_admin_name.delete(0, tk.END)
+                self.entry_edit_password.delete(0, tk.END)
+                self.entry_edit_admin_email.delete(0, tk.END)
+                self.refresh_data()
+            else:
+                raise Exception(messagebox.showerror("Error", "Incorrect master password"))
+        except Exception as e:
+            print(f"Error: {e}")
 
 def is_valid_email(email):
     pattern = r'^[\w\.-]+@[\w\.-]+\.\w+$'
