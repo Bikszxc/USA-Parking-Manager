@@ -18,3 +18,6 @@ def submit(request: Request, name: str = Form(...), owner_type: str = Form(...),
 
     return templates.TemplateResponse("reservation_form.html", {"request": request, "message": "Failed to submit!"})
 
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000, reload=False)

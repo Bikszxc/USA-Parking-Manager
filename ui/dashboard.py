@@ -782,6 +782,7 @@ class HomePage(tk.Frame):
             for slot in self.park_slots:
                 slot_number = slot[1]
                 slot_status = slot[2]
+                print(slot)
 
                 prev_status = (self.previous_slot_status.get(slot_number), get_res_id_details(slot_number))
                 has_reservation = get_res_id_details(slot_number)
@@ -1023,7 +1024,7 @@ class HomePage(tk.Frame):
                 raise Exception("Please enter all required fields!",
                                 messagebox.showerror("Error", "Please enter all required fields!"))
 
-            if get_parkslot_info(slot_number)[0] == 1:
+            if get_parkslot_info(slot_number)[2] == 1:
                 raise Exception("Slot is occupied!", messagebox.showerror("Error", f"Slot {slot_number} is occupied!"))
 
             if not is_valid_plate_number(plate_number):
@@ -1544,6 +1545,8 @@ class VehiclesPage(tk.Frame):
     def fetch_database(self):
         try:
             self.car_owners = sorted([name[1] for name in get_car_owners()])
+            self.dropdown_assign_owner.configure(values=self.car_owners)
+            self.dropdown_unassign_owner.configure(values=self.car_owners)
         except Exception as e:
             print(f"Error: {e}")
 
@@ -1623,7 +1626,6 @@ class AccountsPage(tk.Frame):
         self.refresh_data()
 
     def refresh_data(self):
-        # Initialize placeholder data - you can replace with actual functions
         self.car_owners = sorted([name[1] for name in get_car_owners()])
         self.dropdown_edit_name.config(values=self.car_owners)
 
@@ -1783,7 +1785,6 @@ class AccountsPage(tk.Frame):
         self.entry_edit_master_password.grid(row=18, column=0, columnspan=2, sticky='nsew')
 
     def _create_submit_buttons(self):
-        # New Car Owner Submit Button
         self.btn_new_car_owner_submit = tk.Button(self.frame_new_car_owner, text="Submit", bg='#ffcc00', fg='black',
                                                   relief="flat", command=self.submit_new_car_owner,
                                                   font=self.master.subheader_font)
@@ -1824,7 +1825,6 @@ class AccountsPage(tk.Frame):
         self.dropdown_edit_username.bind("<<ComboboxSelected>>", self.edit_admin_selected)
 
     def _accounts_spacer_and_underline(self):
-        # New Car Owner frame spacing
         for i in [2, 6, 10, 14]:
             tk.Canvas(self.frame_new_car_owner, bg="white", height=0,
                       width=200, highlightthickness=0).grid(row=i, column=0, sticky='sew')
@@ -1833,7 +1833,6 @@ class AccountsPage(tk.Frame):
         tk.Frame(self.frame_new_car_owner, bg='#b80000', height=10).grid(row=15, column=0, sticky='nsew')
         self.frame_new_car_owner.columnconfigure(0, weight=1)
 
-        # Edit Car Owner frame spacing
         for i in [2, 6, 10, 14]:
             tk.Canvas(self.frame_edit_car_owner, bg="white", height=0,
                       width=200, highlightthickness=0).grid(row=i, column=0, columnspan=2, sticky='sew')
@@ -1864,10 +1863,8 @@ class AccountsPage(tk.Frame):
         self.frame_edit_admin.columnconfigure(0, weight=1)
         self.frame_edit_admin.columnconfigure(1, weight=1)
 
-        # Main spacer between rows 0 and 2
         tk.Frame(self, bg='#e6e6e6', height=15).grid(row=1, column=0, columnspan=2, sticky='ew')
 
-    # Button functions - all set to pass as requested
     def submit_new_car_owner(self):
         try:
             owner_name = self.entry_new_name.get()
