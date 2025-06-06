@@ -75,7 +75,7 @@ class LoadingScreen(tk.Frame):
 
 class LoginScreen(tk.Frame):
     def __init__(self, master):
-        super().__init__(master, bg="#e6e6e6")
+        super().__init__(master, bg="#f4c2c2")
         self._configure_grid()
         self._create_error_frame()
         self._create_login_frame()
